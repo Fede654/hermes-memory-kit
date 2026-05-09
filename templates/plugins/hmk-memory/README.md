@@ -53,8 +53,22 @@ process exits with code 2 on the first call. Setting `HMK_DB_PATH` alone is
 | `HMK_PROVIDER_QUOTA_PROCEDURAL` | `2` | idem |
 | `HMK_PROVIDER_SHELVES` | empty | CSV of shelves to filter to (e.g. `library,evidence,plans`). Empty = all. |
 | `HMK_DB_PATH` | derived | Override DB path when it does NOT live at `<base>/library.db`. Does **not** replace `HMK_AGENT_MEMORY_BASE`. |
-| `HMK_MEMORYCTL_PATH` | derived | Override memoryctl.py path. Useful for non-standard deploys. |
+| `HMK_MEMORYCTL_PATH` | auto-detected | Override memoryctl.py path. Only needed for non-standard deploys (see Layout note below). |
 | `HMK_HERMES_HOME` / `HERMES_HOME` | from kwargs | Profile dir; usually provided by Hermes via `initialize()` kwargs. |
+
+### Memoryctl layout autodetection
+
+The provider auto-detects where `memoryctl.py` lives by probing two known
+layouts (in this order) relative to the `hermes_home` Hermes hands it:
+
+| Layout | hermes_home example | Where memoryctl.py is |
+|---|---|---|
+| Workspace (default for `bootstrap_agent.py`) | `~/agents/steve/hermes-home/` | `~/agents/steve/scripts/memoryctl.py` |
+| Root (when hermes_home IS the workspace) | `~/.hermes/` | `~/.hermes/scripts/memoryctl.py` |
+
+If neither matches (e.g. you keep `memoryctl.py` outside the agent tree),
+set `HMK_MEMORYCTL_PATH` to the absolute path. The override is checked
+first and bypasses both probes.
 
 ## Activate it
 

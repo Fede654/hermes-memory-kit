@@ -25,19 +25,26 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Memoryctl import — profile-scoped via hermes_home (kwarg from initialize()).
+# Two layouts are recognised:
+#   - workspace layout: hermes_home is a child of the workspace dir, with
+#     scripts/ as a sibling. Example: ~/agents/steve/hermes-home/  →
+#     ~/agents/steve/scripts/memoryctl.py
+#   - root layout: hermes_home IS the workspace, scripts/ is a child of it.
+#     Example: ~/.hermes/  →  ~/.hermes/scripts/memoryctl.py
 # Lookup priority:
 #   1. HMK_MEMORYCTL_PATH    — explicit override for non-standard deploys
-#   2. <workspace>/scripts/memoryctl.py — standard bootstrapped layout (the
-#      workspace is `Path(hermes_home).parent`)
-#   3. importlib.import_module("memoryctl") — PYTHONPATH lookup (rare)
+#   2. <hermes_home>/../scripts/memoryctl.py  (workspace layout)
+#   3. <hermes_home>/scripts/memoryctl.py     (root layout)
+#   4. importlib.import_module("memoryctl") — PYTHONPATH lookup (rare)
 # Deliberately no fallback to ~/hermes-memory-kit or /home/<user>/... — those
 # would be host-specific and break profile isolation.
 # ---------------------------------------------------------------------------
 def _import_memoryctl(hermes_home: Optional[str] = None):
     candidates: List[Optional[str]] = [os.environ.get("HMK_MEMORYCTL_PATH")]
     if hermes_home:
-        ws = Path(hermes_home).parent
-        candidates.append(str(ws / "scripts" / "memoryctl.py"))
+        hh = Path(hermes_home)
+        candidates.append(str(hh.parent / "scripts" / "memoryctl.py"))
+        candidates.append(str(hh / "scripts" / "memoryctl.py"))
     for c in candidates:
         if c and Path(c).is_file():
             spec = iu.spec_from_file_location("hmk_memoryctl", c)

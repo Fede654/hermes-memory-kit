@@ -1,3 +1,21 @@
+## [3.7.3] — 2026-05-09
+
+### Fixed
+- `hmk-memory` provider now resolves `memoryctl.py` for both bootstrapped
+  layouts. Previously only the workspace layout (`<hermes_home>/../scripts/`)
+  was probed; deploys using the default `~/.hermes/` (root layout, with
+  `scripts/` as a child of hermes_home) would fall through to a PYTHONPATH
+  lookup and fail with `No module named 'memoryctl'`. The provider now also
+  probes `<hermes_home>/scripts/`. `HMK_MEMORYCTL_PATH` remains supported
+  as an explicit override for non-standard deploys.
+- `templates/plugins/hmk-memory/plugin.yaml` bumped to `1.0.1`.
+- README of the plugin documents both layouts and the autodetection order.
+
+Reported by Nicolás (CompAII deploy at `~/.hermes/`) — prefetch was silently
+falling back to `""` for ~12 hours before the regression was caught. The
+diagnosis pointed to `Path(hermes_home).parent` returning the user `$HOME`
+when hermes_home is the workspace root.
+
 ## [3.7.2] — 2026-05-05
 
 Share-readiness hardening so the kit can be cloned and used by colleagues
