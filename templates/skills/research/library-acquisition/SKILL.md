@@ -65,26 +65,32 @@ hardcodear rutas absolutas de un agente específico.
   --title "Título" --author "Autor" [--year 2022] [--isbn ...] [--language es]
 ```
 
-Esto, en un paso: copia el PDF a `raw/`, extrae **todas** las páginas con PyMuPDF,
-limpia (headers/pies, soft-hyphens, espacios), escribe `chapters/00_completo.txt`,
-crea `meta.json`, y actualiza los índices de tópico y maestro. Crea la estructura:
+Esto, en un paso: copia el PDF a `raw/`, extrae **todas** las páginas con PyMuPDF
+en **Markdown estructurado** (detecta encabezados por tamaño de fuente → `#` partes,
+`##`/`###` capítulos/secciones; une títulos multilínea; repara guionado de fin de
+línea; descarta headers/pies y números de página), escribe `chapters/00_completo.md`,
+crea `meta.json` (con `format: markdown` y el conteo de `headings`), y actualiza los
+índices. Estructura:
 
 ```
 topics/<topic_id>/books/<book_slug>/
 ├── meta.json
-├── chapters/   # 00_completo.txt (y capítulos segmentados luego)
+├── chapters/   # 00_completo.md (markdown #/##) → luego capítulos segmentados
 ├── raw/        # PDF original — NUNCA se modifica
 └── annotations/
 ```
 
-> Para extracción plana one-off (traducir/narrar un PDF que no va al corpus) usar el
-> modo `dump` del mismo script — ver skill [`pdf-to-audio`].
+> `--flat` fuerza el `.txt` plano legacy. Para extracción one-off (narrar un PDF que
+> no va al corpus) usar el modo `dump` — ver skill [`pdf-to-audio`].
 
 ## 4. Segmentación en capítulos
 
-Si el libro tiene tabla de contenidos clara, dividir `00_completo.txt` en
-`##_titulo_normalizado.txt` (dos dígitos, snake_case, sin acentos) y actualizar el
-array `chapters` de `meta.json` con `num`, `title`, `pages_pdf`, `words`, `file`.
+Dividir `00_completo.md` **a lo largo de los encabezados `#`/`##`** en
+`##_titulo_normalizado.md` (dos dígitos, snake_case, sin acentos), **preservando el
+markdown** (cada capítulo conserva su encabezado). Actualizar el array `chapters` de
+`meta.json` con `num`, `title`, `pages_pdf`, `words`, `file`. La estructura se propaga:
+la **traducción** preserva los encabezados y el **dictado** (`text_to_speech`) los
+convierte en pausas de sección automáticamente.
 
 ## 5. Validación
 
