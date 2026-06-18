@@ -133,7 +133,9 @@ def _block_text(block):
             out = out + " " + s
         else:
             out = s
-    return re.sub(r"[ \t]+", " ", out).strip()
+    # collapse ALL whitespace (incl. newlines some PDFs embed inside a span),
+    # so a heading/paragraph that wraps lines becomes one clean line.
+    return re.sub(r"\s+", " ", out).strip()
 
 
 def _block_max_size(block):
