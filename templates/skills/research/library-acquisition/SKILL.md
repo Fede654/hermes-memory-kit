@@ -102,6 +102,7 @@ convierte en pausas de sección automáticamente.
 Registrar un **puntero de catálogo** en `library.db` apuntando al corpus, para que el
 libro sea descubrible vía retrieval normal:
 
+**a) Puntero de catálogo** (a nivel libro):
 ```bash
 ./scripts/hmk memoryctl.py add-file \
   --shelf evidence \
@@ -111,11 +112,22 @@ libro sea descubrible vía retrieval normal:
   --importance 0.7
 ```
 
+**b) Indexación por sección** (cada `##` del libro → un chapter HMK, embebido y
+tagueado `corpus/section/<topic>/<slug>`): es lo que habilita los **cruces** —
+retrieval cross-sección/cross-libro y análisis posteriores.
+```bash
+./scripts/hmk library_index.py topics/<topic_id>/books/<book_slug>/meta.json
+./scripts/hmk memoryctl.py embed-backfill        # embebe las secciones nuevas
+```
+Idempotente (`replace` por título); re-correr tras re-segmentar. Recuperás con
+`hybrid-pack` (no `search` solo). Para generar análisis/cruces sobre esta base,
+ver el skill [`corpus-analysis`].
+
 Checklist:
-- [ ] PDF en `raw/`, capítulos limpios en `chapters/`
+- [ ] PDF en `raw/`, capítulos markdown en `chapters_md/` (o `chapters/`)
 - [ ] `meta.json` creado y validado (`wc -w`)
 - [ ] Índices de tópico y maestro actualizados
-- [ ] **Puntero de catálogo registrado en `library.db`**
+- [ ] **Puntero de catálogo + secciones indexadas en `library.db`** (+ `embed-backfill`)
 - [ ] Skill revisado si apareció un edge case nuevo
 
 ## 7. Citas
