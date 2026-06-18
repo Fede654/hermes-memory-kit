@@ -33,6 +33,7 @@ Examples:
 Requires: pymupdf (``pip install pymupdf``).
 """
 import argparse
+import collections
 import json
 import os
 import re
@@ -100,6 +101,107 @@ def extract_all_text(pdf_path, title="", author="", clean=True):
 
 
 # --------------------------------------------------------------------------
+# Structured (Markdown) extraction — captures document structure ONCE at
+# ingestion (headings by relative font size, paragraphs), so every downstream
+# consumer (TTS pauses, translation, analysis, cross-refs) reuses real
+# structure instead of re-guessing it from flat text.
+# --------------------------------------------------------------------------
+def _doc_body_size(doc):
+    """Most common span size (by char volume) — the body-text size."""
+    c = collections.Counter()
+    for page in doc:
+        for b in page.get_text("dict").get("blocks", []):
+            for line in b.get("lines", []):
+                for s in line.get("spans", []):
+                    t = s.get("text", "").strip()
+                    if t:
+                        c[round(s["size"], 1)] += len(t)
+    return max(c, key=c.get) if c else 12.0
+
+
+def _block_text(block):
+    """Join a block's physical lines, repairing line-break hyphenation and
+    soft hyphens, collapsing runs of whitespace."""
+    out = ""
+    for line in block.get("lines", []):
+        s = "".join(span.get("text", "") for span in line.get("spans", [])).replace("\xad", "")
+        if not s:
+            continue
+        if out.endswith("-") and s[:1].islower():
+            out = out[:-1] + s            # word split across lines → rejoin
+        elif out:
+            out = out + " " + s
+        else:
+            out = s
+    return re.sub(r"[ \t]+", " ", out).strip()
+
+
+def _block_max_size(block):
+    return max(
+        (round(s["size"], 1)
+         for line in block.get("lines", [])
+         for s in line.get("spans", [])
+         if s.get("text", "").strip()),
+        default=0.0,
+    )
+
+
+def extract_structured_markdown(pdf_path, title="", author=""):
+    """Extract a PDF to structured Markdown.
+
+    Headings are detected by font size relative to the body size (three bands →
+    ``#`` / ``##`` / ``###``); multi-line / cross-block headings of the same
+    level are merged; body blocks become paragraphs. Running headers/footers
+    (lines equal to the title or author) and lone page numbers are dropped.
+    Returns ``(markdown, pages, n_headings)``.
+    """
+    doc = fitz.open(pdf_path)
+    pages = doc.page_count
+    body = _doc_body_size(doc)
+    title_u, author_u = title.upper().strip(), author.upper().strip()
+
+    def level_for(sz):
+        if sz >= body * 1.7:
+            return 1
+        if sz >= body * 1.3:
+            return 2
+        if sz >= body * 1.1:
+            return 3
+        return 0  # body
+
+    units = []  # (level, text); level 0 == paragraph
+    for pno in range(pages):
+        for b in doc.load_page(pno).get_text("dict").get("blocks", []):
+            if b.get("type") != 0:
+                continue
+            txt = _block_text(b)
+            if not txt:
+                continue
+            up = txt.upper()
+            if (title_u and up == title_u) or (author_u and up == author_u):
+                continue
+            if re.fullmatch(r"\d{1,4}", txt):  # lone page number
+                continue
+            lvl = level_for(_block_max_size(b))
+            # merge a heading that continued from the immediately-preceding
+            # heading of the SAME level (title wrapped across blocks)
+            if lvl and units and units[-1][0] == lvl:
+                units[-1] = (lvl, units[-1][1] + " " + txt)
+            else:
+                units.append((lvl, txt))
+    doc.close()
+
+    out, n_head = [], 0
+    for lvl, txt in units:
+        if lvl:
+            out.append(("#" * lvl) + " " + txt)
+            n_head += 1
+        else:
+            out.append(txt)
+    return "\n\n".join(out), pages, n_head
+
+
+# --------------------------------------------------------------------------
 # mode: dump
 # --------------------------------------------------------------------------
 def cmd_dump(args):
@@ -154,8 +256,14 @@ def cmd_corpus(args):
     if not os.path.exists(raw_path):
         shutil.copy2(args.pdf, raw_path)
 
-    full_text, pages = extract_all_text(args.pdf, args.title, args.author)
-    chapter_rel = os.path.join("chapters", "00_completo.txt")
+    if getattr(args, "flat", False):
+        full_text, pages = extract_all_text(args.pdf, args.title, args.author)
+        chapter_rel = os.path.join("chapters", "00_completo.txt")
+        method, chapter_fmt, n_head = "pymupdf_page_text", "text", 0
+    else:
+        full_text, pages, n_head = extract_structured_markdown(args.pdf, args.title, args.author)
+        chapter_rel = os.path.join("chapters", "00_completo.md")
+        method, chapter_fmt = "pymupdf_dict_structured_markdown", "markdown"
     with open(os.path.join(book_dir, chapter_rel), "w", encoding="utf-8") as f:
         f.write(full_text)
     words = len(full_text.split())
@@ -173,10 +281,12 @@ def cmd_corpus(args):
             "raw_path": raw_rel,
         },
         "extraction": {
-            "method": "pymupdf_page_text",
+            "method": method,
             "date": date.today().isoformat(),
             "coverage_pages": f"1-{pages}",
-            "cleaning": ["removed_headers_footers", "joined_soft_hyphens", "collapsed_spaces"],
+            "format": chapter_fmt,
+            "headings": n_head,
+            "cleaning": ["removed_headers_footers", "joined_soft_hyphens", "rejoined_hyphenation"],
         },
         "chapters": [
             {"num": "00", "title": "Completo", "pages_pdf": f"1-{pages}", "words": words, "file": chapter_rel}
@@ -223,10 +333,11 @@ def cmd_corpus(args):
         "meta": os.path.join(book_dir, "meta.json"),
     }, ensure_ascii=False))
     sys.stderr.write(
-        "\nNOTE: chapters/00_completo.txt holds the WHOLE book. If it has a clear\n"
-        "table of contents, split it into ##_titulo.txt chapters and update meta.json.\n"
-        "Then register a catalog entry in memory (see the library-acquisition skill,\n"
-        "step 'Cierre de ingreso') so the book is discoverable via librarian/hybrid-pack.\n"
+        f"\nNOTE: chapters/{os.path.basename(chapter_rel)} holds the WHOLE book "
+        f"({n_head} headings detected, format={chapter_fmt}). Split it along the\n"
+        "'#'/'##' headings into ##_titulo chapters and update meta.json, then register a\n"
+        "catalog entry in memory (see the library-acquisition skill, 'Cierre de ingreso')\n"
+        "so the book is discoverable via librarian/hybrid-pack.\n"
     )
     return 0
 
@@ -245,6 +356,7 @@ def build_parser():
     pc.add_argument("--isbn", default="")
     pc.add_argument("--language", default="es")
     pc.add_argument("--library-root", default=None, help="override corpus root (else $LIBRARY_ROOT / $HMK_WORKSPACE_ROOT/library)")
+    pc.add_argument("--flat", action="store_true", help="legacy flat .txt extraction instead of structured Markdown")
     pc.set_defaults(func=cmd_corpus)
 
     pd = sub.add_parser("dump", help="flat full-text extraction to stdout/file")
