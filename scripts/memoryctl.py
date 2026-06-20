@@ -75,10 +75,12 @@ DEFAULT_EMBED_MODELS = {
     "google": "gemini-embedding-001",
     "local": "sentence-transformers/all-MiniLM-L6-v2",
     "model2vec": "minishlab/potion-retrieval-32M",
+    "ollama": "bge-m3",
 }
 DEFAULT_EMBED_OUTPUT_DIMS = {
     "google": 768,
     "model2vec": 512,
+    "ollama": 1024,
 }
 LOCAL_MODEL_CACHE = {}
 MODEL2VEC_CACHE = {}
@@ -732,6 +734,35 @@ def embed_texts_model2vec(texts, input_type="passage", model=None):
     return [list(map(float, row.tolist())) for row in vectors]
 
 
+def embed_texts_ollama(texts, input_type="passage", model=None):
+    """Embeddings via a local/LAN Ollama server (e.g. bge-m3, 1024-dim).
+    Endpoint from HERMES_EMBED_OLLAMA_URL (default http://127.0.0.1:11434).
+    No prefix scheme; bge-m3 is symmetric for query/passage."""
+    import urllib.request
+
+    model = normalize_embed_model("ollama", model)
+    ollama_url = (read_env_key("HERMES_EMBED_OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
+    payload = json.dumps(
+        {
+            "model": model,
+            "input": texts,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{ollama_url}/api/embed",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        body = json.loads(resp.read().decode())
+    embeddings = body.get("embeddings")
+    if embeddings is None:
+        raise SystemExit(f"ollama embedding response missing embeddings: {body}")
+    if len(embeddings) != len(texts):
+        raise SystemExit(f"unexpected ollama embedding response size: expected {len(texts)}, got {len(embeddings)}")
+    return [list(map(float, vec)) for vec in embeddings]
+
+
 def embed_texts(provider, texts, input_type="passage", model=None, output_dimensionality=None):
     provider = normalize_embed_provider(provider)
     model = normalize_embed_model(provider, model)
@@ -748,6 +779,8 @@ def embed_texts(provider, texts, input_type="passage", model=None, output_dimens
         return embed_texts_local(texts, input_type=input_type, model=model)
     if provider == "model2vec":
         return embed_texts_model2vec(texts, input_type=input_type, model=model)
+    if provider == "ollama":
+        return embed_texts_ollama(texts, input_type=input_type, model=model)
     raise SystemExit(f"unsupported embedding provider: {provider}")
 
 
@@ -854,6 +887,11 @@ def embeddings_capabilities():
                 "configured": bool(importlib.util.find_spec("model2vec")),
                 "default_model": default_embed_model("model2vec"),
                 "default_output_dimensionality": default_embed_output_dimensionality("model2vec"),
+            },
+            "ollama": {
+                "configured": bool(read_env_key("HERMES_EMBED_OLLAMA_URL")),
+                "default_model": default_embed_model("ollama"),
+                "default_output_dimensionality": default_embed_output_dimensionality("ollama"),
             },
         },
     }

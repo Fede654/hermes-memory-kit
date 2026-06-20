@@ -5,6 +5,7 @@
 - `nvidia` — default
 - `google`
 - `local`
+- `ollama` — local/LAN Ollama server (e.g. `bge-m3`, 1024-dim)
 
 ## Variables
 
@@ -22,6 +23,13 @@
 ### Local
 
 - `HERMES_EMBED_LOCAL_MODEL` — default `sentence-transformers/all-MiniLM-L6-v2`
+
+### Ollama
+
+- `HERMES_EMBED_OLLAMA_URL` — Ollama base URL, default `http://127.0.0.1:11434` (uses `/api/embed`)
+- `HERMES_EMBED_OLLAMA_MODEL` — default `bge-m3` (1024 dims)
+- No API key; the model must be pulled on the Ollama server. Good fit for a
+  GPU/LAN-local embed server.
 
 ## Default
 
