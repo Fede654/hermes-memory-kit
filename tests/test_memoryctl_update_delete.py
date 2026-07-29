@@ -99,6 +99,26 @@ def test_update_preserves_embeddings_when_content_unchanged(mc):
     assert mc.expand(cid)["importance"] == pytest.approx(0.9)
 
 
+def test_update_bumps_book_updated_at(mc, monkeypatch):
+    cid = mc.add_text(shelf_name="library", title="book-bump", raw="body")
+    con = mc.connect()
+    before = con.execute(
+        "SELECT updated_at FROM books WHERE id=(SELECT book_id FROM chapters WHERE id=?)", (cid,)
+    ).fetchone()[0]
+    con.close()
+    future = before + 1000
+    monkeypatch.setattr(mc, "now_ts", lambda: future)
+
+    mc.update_chapter(cid, importance=0.7)
+
+    con = mc.connect()
+    after = con.execute(
+        "SELECT updated_at FROM books WHERE id=(SELECT book_id FROM chapters WHERE id=?)", (cid,)
+    ).fetchone()[0]
+    con.close()
+    assert after == future
+
+
 def test_update_title_syncs_book_and_slug(mc):
     cid = mc.add_text(shelf_name="library", title="old-title", raw="body")
 

@@ -1635,6 +1635,13 @@ def update_chapter(chapter_id, content=None, title=None, tags=None, importance=N
     )
     insert_chapter_fts(con, chapter_id, new_title, new_spr, new_raw, json.dumps(new_tags))
 
+    # The book container reflects the last content mutation, consistent with
+    # upsert_book() bumping updated_at on every add_text.
+    con.execute(
+        "UPDATE books SET updated_at=? WHERE id=?",
+        (now_ts(), old["book_id"]),
+    )
+
     embeddings_dropped = 0
     if content_changed:
         cur = con.execute("DELETE FROM chapter_embeddings WHERE chapter_id=?", (chapter_id,))
