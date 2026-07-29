@@ -405,6 +405,18 @@ def init_db():
           PRIMARY KEY (chapter_id, provider, model)
         );
 
+        CREATE TABLE IF NOT EXISTS link_suggestions (
+          id INTEGER PRIMARY KEY,
+          src_chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+          dst_chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+          score REAL NOT NULL,
+          status TEXT NOT NULL DEFAULT 'candidate',
+          created_at INTEGER NOT NULL,
+          reviewed_at INTEGER,
+          reviewer_note TEXT,
+          UNIQUE(src_chapter_id, dst_chapter_id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_chapter_embeddings_provider_model
         ON chapter_embeddings(provider, model);
         """
@@ -1618,6 +1630,198 @@ def add_link(src_id, dst_id, link_type, weight=1.0, note=None):
     con.close()
 
 
+# --- suggest-links (v3.9.0) ---
+
+
+def suggest_links(chapter_id=None, limit=8, min_score=0.0, provider=None,
+                  model=None, dedup=True):
+    """Compute K nearest vector neighbors and store as candidate suggestions.
+
+    When chapter_id is given, only that chapter's neighbors are proposed.
+    When None, all chapters with embeddings are processed (batch mode).
+
+    Filters: no self-links, no already-linked pairs (either direction),
+    no same-book chapters.  Already existing candidates (any status) are
+    not duplicated (UNIQUE constraint).
+    """
+    cfg = embeddings_runtime_config(provider=provider, model=model)
+    provider = cfg["provider"]
+    model = cfg["model"]
+    init_db()
+    con = connect()
+
+    # Gather source chapters with embeddings for this provider/model.
+    src_sql = """
+        SELECT DISTINCT c.id, c.title, c.book_id, c.spr
+        FROM chapters c
+        JOIN chapter_embeddings e ON e.chapter_id = c.id
+        WHERE e.provider = ? AND e.model = ?
+          AND c.embed_disabled = 0
+    """
+    src_params: list = [provider, model]
+    if chapter_id is not None:
+        src_sql += " AND c.id = ?"
+        src_params.append(chapter_id)
+    src_rows = con.execute(src_sql, src_params).fetchall()
+    if not src_rows:
+        con.close()
+        return {"proposed": 0, "skipped": 0}
+
+    # Load all vectors once for batch mode.
+    vec_sql = """
+        SELECT e.chapter_id, e.embedding_json
+        FROM chapter_embeddings e
+        JOIN chapters c ON c.id = e.chapter_id
+        WHERE e.provider = ? AND e.model = ?
+          AND c.embed_disabled = 0
+    """
+    all_vecs = {
+        row["chapter_id"]: json.loads(row["embedding_json"])
+        for row in con.execute(vec_sql, (provider, model)).fetchall()
+    }
+    if not all_vecs:
+        con.close()
+        return {"proposed": 0, "skipped": 0}
+
+    proposed = 0
+    skipped = 0
+
+    for src_row in src_rows:
+        src_id = src_row["id"]
+        src_book = src_row["book_id"]
+        src_vec = all_vecs.get(src_id)
+        if src_vec is None:
+            continue
+
+        # Compute cosine similarity against all other chapters.
+        scored = []
+        for dst_id, dst_vec in all_vecs.items():
+            if dst_id == src_id:
+                continue
+            sim = cosine_similarity(src_vec, dst_vec)
+            if sim >= min_score:
+                scored.append((dst_id, sim))
+        scored.sort(key=lambda x: x[1], reverse=True)
+
+        # Load filters: existing links + existing suggestions + same-book
+        existing_links = {
+            row["id2"]
+            for row in con.execute(
+                "SELECT src_chapter_id AS id2 FROM chapter_links WHERE dst_chapter_id=? "
+                "UNION SELECT dst_chapter_id AS id2 FROM chapter_links WHERE src_chapter_id=?",
+                (src_id, src_id),
+            ).fetchall()
+        }
+        existing_suggestions = {
+            row["id2"]
+            for row in con.execute(
+                "SELECT src_chapter_id AS id2 FROM link_suggestions WHERE dst_chapter_id=? "
+                "UNION SELECT dst_chapter_id AS id2 FROM link_suggestions WHERE src_chapter_id=?",
+                (src_id, src_id),
+            ).fetchall()
+        }
+        candidates_added = 0
+        for dst_id, sim in scored:
+            if candidates_added >= limit:
+                break
+            if dst_id in existing_links or dst_id in existing_suggestions:
+                skipped += 1
+                continue
+            # Check same-book
+            dst_book = con.execute(
+                "SELECT book_id FROM chapters WHERE id=?", (dst_id,)
+            ).fetchone()
+            if dst_book and dst_book["book_id"] == src_book:
+                skipped += 1
+                continue
+            # Insert suggestion
+            try:
+                con.execute(
+                    """INSERT INTO link_suggestions
+                       (src_chapter_id, dst_chapter_id, score, status, created_at)
+                       VALUES (?, ?, ?, 'candidate', ?)""",
+                    (src_id, dst_id, round(sim, 6), now_ts()),
+                )
+                proposed += 1
+                candidates_added += 1
+            except sqlite3.IntegrityError:
+                skipped += 1
+
+    con.commit()
+    con.close()
+    return {"proposed": proposed, "skipped": skipped, "provider": provider, "model": model}
+
+
+def list_link_suggestions(status=None, limit=50):
+    """List link suggestions with both chapters' context.
+
+    Status filter: None = all, or 'candidate'/'accepted'/'rejected'.
+    """
+    init_db()
+    con = connect()
+    sql = """
+        SELECT
+          ls.id, ls.src_chapter_id, ls.dst_chapter_id, ls.score,
+          ls.status, ls.created_at, ls.reviewed_at, ls.reviewer_note,
+          sc.title AS src_title, sc.spr AS src_spr,
+          dc.title AS dst_title, dc.spr AS dst_spr,
+          sb.title AS src_book, dbk.title AS dst_book
+        FROM link_suggestions ls
+        JOIN chapters sc ON sc.id = ls.src_chapter_id
+        JOIN chapters dc ON dc.id = ls.dst_chapter_id
+        JOIN books sb ON sb.id = sc.book_id
+        JOIN books dbk ON dbk.id = dc.book_id
+    """
+    params: list = []
+    if status:
+        sql += " WHERE ls.status = ?"
+        params.append(status)
+    sql += " ORDER BY ls.score DESC, ls.id ASC LIMIT ?"
+    params.append(limit)
+    rows = con.execute(sql, params).fetchall()
+    con.close()
+    return [dict(r) for r in rows]
+
+
+def review_link_suggestion(suggestion_id, action, note=None):
+    """Accept or reject a link suggestion.
+
+    'accept' creates a real chapter_links edge (link_type='suggested',
+    weight=score) and marks the suggestion accepted.
+    'reject' marks it rejected so it won't be re-proposed.
+    """
+    if action not in ("accept", "reject"):
+        raise SystemExit(f"review_link_suggestion: action must be 'accept' or 'reject', got {action!r}")
+    init_db()
+    con = connect()
+    row = con.execute(
+        "SELECT * FROM link_suggestions WHERE id=?", (suggestion_id,)
+    ).fetchone()
+    if not row:
+        con.close()
+        raise SystemExit(f"suggestion not found: {suggestion_id}")
+    if row["status"] != "candidate":
+        con.close()
+        raise SystemExit(
+            f"suggestion {suggestion_id} is already {row['status']} (cannot {action})"
+        )
+
+    if action == "accept":
+        con.execute(
+            """INSERT OR REPLACE INTO chapter_links
+               (src_chapter_id, dst_chapter_id, link_type, weight, note, created_at)
+               VALUES (?, ?, 'suggested', ?, ?, ?)""",
+            (row["src_chapter_id"], row["dst_chapter_id"], row["score"], note, now_ts()),
+        )
+    con.execute(
+        "UPDATE link_suggestions SET status=?, reviewed_at=?, reviewer_note=? WHERE id=?",
+        (action, now_ts(), note, suggestion_id),
+    )
+    con.commit()
+    con.close()
+    return {"suggestion_id": suggestion_id, "action": action, "status": action}
+
+
 def update_chapter(chapter_id, content=None, title=None, tags=None, importance=None):
     """Update a chapter in place (v3.8.0+).
 
@@ -1802,6 +2006,10 @@ def stats():
         "chapters": con.execute("SELECT COUNT(*) FROM chapters").fetchone()[0],
         "embeddings": con.execute("SELECT COUNT(*) FROM chapter_embeddings").fetchone()[0],
         "links": con.execute("SELECT COUNT(*) FROM chapter_links").fetchone()[0],
+        "suggestions": con.execute(
+            "SELECT COUNT(*) FROM link_suggestions WHERE status='candidate'"
+        ).fetchone()[0],
+        "suggestions_total": con.execute("SELECT COUNT(*) FROM link_suggestions").fetchone()[0],
         "queries": con.execute("SELECT COUNT(*) FROM queries_log").fetchone()[0],
         "embed_disabled": con.execute(
             "SELECT COUNT(*) FROM chapters WHERE embed_disabled=1"
@@ -2094,6 +2302,20 @@ def main():
     p_link.add_argument("--weight", type=float, default=1.0)
     p_link.add_argument("--note")
 
+    p_suggest = sub.add_parser("suggest-links", help="discover link candidates via vector similarity")
+    p_suggest.add_argument("--chapter-id", type=int, help="suggest links for a single chapter (omit for all)")
+    p_suggest.add_argument("--limit", type=int, default=8, help="max suggestions per chapter (default 8)")
+    p_suggest.add_argument("--min-score", type=float, default=0.0)
+    p_suggest.add_argument("--provider", default=default_embed_provider())
+    p_suggest.add_argument("--model")
+
+    p_review = sub.add_parser("review-links", help="review link suggestions (list/accept/reject)")
+    p_review.add_argument("--status", help="filter by status (candidate/accepted/rejected)")
+    p_review.add_argument("--limit", type=int, default=50, help="max suggestions to list")
+    p_review.add_argument("--accept", type=int, help="accept suggestion by id")
+    p_review.add_argument("--reject", type=int, help="reject suggestion by id")
+    p_review.add_argument("--note", help="reviewer note (for accept/reject)")
+
     p_embed = sub.add_parser("embed-backfill")
     p_embed.add_argument("--provider", default=default_embed_provider())
     p_embed.add_argument("--model")
@@ -2191,6 +2413,23 @@ def main():
     elif args.command == "link":
         add_link(args.src, args.dst, args.type, args.weight, args.note)
         print(json.dumps({"ok": True}, indent=2))
+    elif args.command == "suggest-links":
+        result = suggest_links(
+            chapter_id=args.chapter_id,
+            limit=args.limit,
+            min_score=args.min_score,
+            provider=args.provider,
+            model=args.model,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    elif args.command == "review-links":
+        if args.accept:
+            result = review_link_suggestion(args.accept, "accept", args.note)
+        elif args.reject:
+            result = review_link_suggestion(args.reject, "reject", args.note)
+        else:
+            result = list_link_suggestions(status=args.status, limit=args.limit)
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     elif args.command == "embed-backfill":
         result = backfill_embeddings(
             provider=args.provider,

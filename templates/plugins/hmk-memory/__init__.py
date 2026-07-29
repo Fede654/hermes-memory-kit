@@ -117,16 +117,17 @@ LIBRARIAN_SCHEMA = {
         "(~/.hermes/agent-memory/library.db). This is the canonical long-term "
         "memory store: anything saved here survives across sessions and can be "
         "retrieved later by query or exact chapter id.\n\n"
-        "Actions:\n"
-        "- query: hybrid (lexical + semantic) retrieval. Returns ranked items.\n"
-        "- search: pure lexical FTS search.\n"
-        "- add_text: store a new text chapter under a shelf.\n"
-        "- add_file: ingest a file from disk into a shelf.\n"
-        "- expand: return the full record for a chapter id, including neighbors.\n"
-        "- update: edit a chapter in place (content/title/tags/importance).\n"
-        "- delete: remove a chapter (cascades embeddings/links).\n"
-        "- stats: return library counts and embedding metadata.\n"
-        "- add_link: create a directed link between two chapters.\n\n"
+        "Actions:\\n"
+        "- query: hybrid (lexical + semantic) retrieval. Returns ranked items.\\n"
+        "- search: pure lexical FTS search.\\n"
+        "- add_text: store a new text chapter under a shelf.\\n"
+        "- add_file: ingest a file from disk into a shelf.\\n"
+        "- expand: return the full record for a chapter id, including neighbors.\\n"
+        "- update: edit a chapter in place (content/title/tags/importance).\\n"
+        "- delete: remove a chapter (cascades embeddings/links).\\n"
+        "- add_link: create a directed link between two chapters.\\n"
+        "- suggest_links: list link suggestions from vector similarity (read-only).\\n"
+        "- stats: return library counts and embedding metadata.\\n\\n"
         "Use this tool instead of SQL scripts or manual memoryctl calls."
     ),
     "parameters": {
@@ -134,7 +135,7 @@ LIBRARIAN_SCHEMA = {
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["query", "search", "add_text", "add_file", "expand", "update", "delete", "stats", "add_link"],
+                "enum": ["query", "search", "add_text", "add_file", "expand", "update", "delete", "stats", "add_link", "suggest_links"],
                 "description": "The librarian action to perform.",
             },
             "query": {"type": "string", "description": "Search/query text (required for query/search)."},
@@ -400,6 +401,16 @@ class HMKMemoryProvider(MemoryProvider):
                     note=args.get("note"),
                 )
                 return json.dumps({"success": True, "source_id": source_id, "target_id": target_id, "link_type": link_type}, ensure_ascii=False)
+
+            if action == "suggest_links":
+                # Read-only: list candidates only — accept/reject is CLI-side
+                chapter_id = None
+                if args.get("chapter_id") is not None:
+                    chapter_id = int(args["chapter_id"])
+                status = args.get("status") or "candidate"
+                limit = _get_int("limit", 20)
+                rows = mc.list_link_suggestions(status=status, limit=limit)
+                return json.dumps({"success": True, "items": rows}, ensure_ascii=False, default=str)
 
             return json.dumps({"success": False, "error": f"unknown action: {action}"}, ensure_ascii=False)
         except Exception as e:

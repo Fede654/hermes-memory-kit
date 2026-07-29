@@ -20,6 +20,14 @@
 - `tests/test_corpus_policy.py` — 30 tests covering file blocking, secret
   scan, classification, policy loading, and full integration with
   memoryctl add_file/add_text/update/stats/embed-candidates.
+- **Suggest-links**: `memoryctl suggest-links` discovers link candidates
+  via vector cosine similarity (K nearest neighbors from stored embeddings),
+  filtering out self-links, already-linked pairs, and same-book chapters.
+  Candidates are stored in the `link_suggestions` table with status
+  `candidate`; `memoryctl review-links --accept/--reject` triggers the
+  human-review guard. The librarian tool exposes a read-only `suggest_links`
+  action — accept/reject stays CLI-side so the agent cannot self-approve
+  graph mutations.
 
 ### Changed
 - `update_chapter` now re-scans content for secrets and updates
