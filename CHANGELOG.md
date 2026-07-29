@@ -13,7 +13,8 @@
   can archive content before deleting.
 - CLI subcommands `memoryctl.py update` / `memoryctl.py delete`.
 - `librarian` tool (hmk-memory plugin) gains `update` and `delete` actions.
-  Plugin bumped to 1.1.0.
+  Plugin bumped to 1.1.0. `hermes hmk-memory` CLI gains matching `update` /
+  `delete` subcommands; plugin README documents the `librarian` tool.
 - `tests/test_memoryctl_update_delete.py`: 11 tests against a real temp
   library.db covering FTS consistency, embedding drop/preserve, slug
   collisions, cascade, book pruning, and the CLI roundtrip.

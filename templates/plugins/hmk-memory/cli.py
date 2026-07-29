@@ -265,6 +265,40 @@ def _cmd_expand(args) -> int:
     return 0
 
 
+def _cmd_update(args) -> int:
+    mc = _get_memoryctl()
+    if args.chapter_id is None:
+        print("ERROR: --chapter-id is required", file=sys.stderr)
+        return 2
+    tags = _parse_csv(args.tags)
+    if args.content is None and not args.title and tags is None and args.importance is None:
+        print("ERROR: nothing to update: pass --content, --title, --tags, and/or --importance", file=sys.stderr)
+        return 2
+    import json
+
+    result = mc.update_chapter(
+        args.chapter_id,
+        content=args.content,
+        title=args.title or None,
+        tags=tags,
+        importance=args.importance,
+    )
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    return 0
+
+
+def _cmd_delete(args) -> int:
+    mc = _get_memoryctl()
+    if args.chapter_id is None:
+        print("ERROR: --chapter-id is required", file=sys.stderr)
+        return 2
+    import json
+
+    result = mc.delete_chapter(args.chapter_id, prune_book=not args.keep_book)
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    return 0
+
+
 def _cmd_stats(args) -> int:
     mc = _get_memoryctl()
     import json
@@ -299,12 +333,14 @@ def hmk_memory_command(args) -> int:
         "add-text": _cmd_add_text,
         "add-file": _cmd_add_file,
         "expand": _cmd_expand,
+        "update": _cmd_update,
+        "delete": _cmd_delete,
         "stats": _cmd_stats,
         "link": _cmd_link,
     }
     handler = handlers.get(sub)
     if handler is None:
-        print("Usage: hermes hmk-memory <status|query|search|add-text|add-file|expand|stats|link>", file=sys.stderr)
+        print("Usage: hermes hmk-memory <status|query|search|add-text|add-file|expand|update|delete|stats|link>", file=sys.stderr)
         return 1
     return handler(args)
 
@@ -355,6 +391,19 @@ def register_cli(subparser) -> None:
     # expand
     expand_p = subs.add_parser("expand", help="Show full chapter record")
     expand_p.add_argument("--chapter-id", type=int, required=True, help="Chapter id")
+
+    # update
+    update_p = subs.add_parser("update", help="Update a chapter in place (content/title/tags/importance)")
+    update_p.add_argument("--chapter-id", type=int, required=True, help="Chapter id")
+    update_p.add_argument("--content", "-c", help="New content (recomputes spr; drops stored embeddings)")
+    update_p.add_argument("--title", help="New title (keeps book title/slug in sync)")
+    update_p.add_argument("--tags", help="Comma-separated tags; replaces the tag set when provided")
+    update_p.add_argument("--importance", type=float, help="Importance 0.0-1.0")
+
+    # delete
+    delete_p = subs.add_parser("delete", help="Delete a chapter (cascades embeddings/links; prunes empty book)")
+    delete_p.add_argument("--chapter-id", type=int, required=True, help="Chapter id")
+    delete_p.add_argument("--keep-book", action="store_true", help="Keep the parent book even if left empty")
 
     # stats
     subs.add_parser("stats", help="Library statistics")
