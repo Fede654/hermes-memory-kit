@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -1107,6 +1108,55 @@ def linked_neighbors(chapter_id):
     return [dict(row) for row in rows]
 
 
+# --- maintenance lock (v3.9.0, flock) ---
+
+
+def _lock_maintenance():
+    """Acquire an exclusive flock on the maintenance lock file.
+
+    Non-blocking: fails immediately with exit code 3 if another
+    process holds the lock.  Used by batch commands (embed-backfill,
+    bootstrap, migration) to prevent interleaved runs.
+
+    Read-only commands (stats, search, pack, expand, query, etc.)
+    and single-chapter mutations (add_text/add_file/update/delete)
+    do NOT take this lock — WAL handles those.
+    """
+    if BASE_DIR is None:
+        return  # no-op when config isn't set (tests)
+    lock_path = BASE_DIR / ".maintenance.lock"
+    try:
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+    except OSError as exc:
+        raise SystemExit(
+            f"ERROR: cannot open maintenance lock at {lock_path}: {exc}"
+        )
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        raise SystemExit(
+            "ERROR: another maintenance process holds the lock.\n"
+            f"  Lock file: {lock_path}\n"
+            "  If you are certain no process is running, remove the lock file manually."
+        )
+    return fd
+
+
+def _unlock_maintenance(fd):
+    """Release flock and close fd."""
+    if fd is None:
+        return
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    except Exception:
+        pass
+    try:
+        os.close(fd)
+    except Exception:
+        pass
+
+
 def embedding_candidates(provider=None, model=None, limit=0, only_missing=True):
     provider = normalize_embed_provider(provider)
     model = normalize_embed_model(provider, model)
@@ -1148,31 +1198,35 @@ def embedding_candidates(provider=None, model=None, limit=0, only_missing=True):
 
 
 def backfill_embeddings(provider=None, model=None, batch_size=8, limit=0, only_missing=True):
-    cfg = embeddings_runtime_config(provider=provider, model=model)
-    provider = cfg["provider"]
-    model = cfg["model"]
-    output_dimensionality = cfg["output_dimensionality"]
-    candidates = embedding_candidates(provider=provider, model=model, limit=limit, only_missing=only_missing)
-    if not candidates:
-        return {"processed": 0, "provider": provider, "model": model}
-    con = connect()
-    processed = 0
-    for start in range(0, len(candidates), batch_size):
-        batch = candidates[start : start + batch_size]
-        texts = [embed_input_text(row) for row in batch]
-        vectors = embed_texts(
-            provider,
-            texts,
-            input_type="passage",
-            model=model,
-            output_dimensionality=output_dimensionality,
-        )
-        for row, vector, source_text in zip(batch, vectors, texts):
-            upsert_embedding(con, row["id"], provider, model, source_text, vector)
-            processed += 1
-        con.commit()
-    con.close()
-    return {"processed": processed, "provider": provider, "model": model}
+    fd = _lock_maintenance()
+    try:
+        cfg = embeddings_runtime_config(provider=provider, model=model)
+        provider = cfg["provider"]
+        model = cfg["model"]
+        output_dimensionality = cfg["output_dimensionality"]
+        candidates = embedding_candidates(provider=provider, model=model, limit=limit, only_missing=only_missing)
+        if not candidates:
+            return {"processed": 0, "provider": provider, "model": model}
+        con = connect()
+        processed = 0
+        for start in range(0, len(candidates), batch_size):
+            batch = candidates[start : start + batch_size]
+            texts = [embed_input_text(row) for row in batch]
+            vectors = embed_texts(
+                provider,
+                texts,
+                input_type="passage",
+                model=model,
+                output_dimensionality=output_dimensionality,
+            )
+            for row, vector, source_text in zip(batch, vectors, texts):
+                upsert_embedding(con, row["id"], provider, model, source_text, vector)
+                processed += 1
+            con.commit()
+        con.close()
+        return {"processed": processed, "provider": provider, "model": model}
+    finally:
+        _unlock_maintenance(fd)
 
 
 def semantic_search(query, limit=8, provider=None, model=None, use_binary=None,
@@ -2043,35 +2097,39 @@ def stats():
 
 
 def bootstrap():
-    if DB_PATH.exists():
-        DB_PATH.unlink()
-    init_db()
-    bootstrap_docs = load_bootstrap_docs()
-    loaded = []
-    for path, shelf, title, tags in bootstrap_docs:
-        if not Path(path).exists():
-            continue
-        chapter_id = add_file(path, shelf_name=shelf, title=title, tags=tags, importance=0.8)
-        loaded.append((path, chapter_id))
+    fd = _lock_maintenance()
+    try:
+        if DB_PATH.exists():
+            DB_PATH.unlink()
+        init_db()
+        bootstrap_docs = load_bootstrap_docs()
+        loaded = []
+        for path, shelf, title, tags in bootstrap_docs:
+            if not Path(path).exists():
+                continue
+            chapter_id = add_file(path, shelf_name=shelf, title=title, tags=tags, importance=0.8)
+            loaded.append((path, chapter_id))
 
-    title_to_id = {}
-    for _, _, title, _ in bootstrap_docs:
-        res = search(title, limit=1)
-        if res:
-            title_to_id[title] = res[0]["id"]
+        title_to_id = {}
+        for _, _, title, _ in bootstrap_docs:
+            res = search(title, limit=1)
+            if res:
+                title_to_id[title] = res[0]["id"]
 
-    def maybe_link(src_title, dst_title, link_type):
-        src = title_to_id.get(src_title)
-        dst = title_to_id.get(dst_title)
-        if src and dst:
-            add_link(src, dst, link_type)
+        def maybe_link(src_title, dst_title, link_type):
+            src = title_to_id.get(src_title)
+            dst = title_to_id.get(dst_title)
+            if src and dst:
+                add_link(src, dst, link_type)
 
-    maybe_link("openclaw-roadmap", "openclaw-master-plan", "related_to")
-    maybe_link("openclaw-master-plan", "openclaw-architecture", "depends_on")
-    maybe_link("hermes-soul", "hermes-memory-stable", "anchors")
-    maybe_link("hermes-user-profile", "hermes-memory-stable", "related_to")
+        maybe_link("openclaw-roadmap", "openclaw-master-plan", "related_to")
+        maybe_link("openclaw-master-plan", "openclaw-architecture", "depends_on")
+        maybe_link("hermes-soul", "hermes-memory-stable", "anchors")
+        maybe_link("hermes-user-profile", "hermes-memory-stable", "related_to")
 
-    return loaded
+        return loaded
+    finally:
+        _unlock_maintenance(fd)
 
 
 def parse_tags(text):
