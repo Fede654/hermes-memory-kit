@@ -35,6 +35,14 @@
   the new fields.
 - `ingest_any.py` enforces file-level blocking and sets `source_kind`
   classification for selective embedding.
+- **Atomic projection**: `export_obsidian.py` now builds into a staging
+  dir (`<vault>/.staging/<run_id>/`) and atomically swaps to
+  `<vault>/live/` via `os.rename`. A `projection-manifest.json` with
+  per-note content hashes enables idempotent rebuilds (unchanged notes
+  are skipped; counts reported as written/unchanged/removed_orphans).
+  Orphan notes for deleted chapters are pruned automatically.
+  `--check` mode exits non-zero on drift (CI/cron guard).
+  Takes the maintenance flock for safety.
 
 ## [3.8.1] — 2026-07-28
 
