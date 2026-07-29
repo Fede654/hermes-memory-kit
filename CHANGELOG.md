@@ -30,6 +30,12 @@
   graph mutations.
 
 ### Changed
+- **Local-first embeddings**: default provider switched from `nvidia` (cloud API)
+  to `local` (BAAI/bge-m3, 1024-dim, multilingual). This keeps embedding data
+  on the local machine — no chapter content leaves the box for embedding.
+  Previous NVIDIA vectors coexist (keyed by chapter_id, provider, model); a
+  one-time `embed-backfill` with the default provider regenerates all vectors
+  locally.
 - `update_chapter` now re-scans content for secrets and updates
   `embed_disabled` / `embed_disable_reason` accordingly. Report includes
   the new fields.

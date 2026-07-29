@@ -82,11 +82,11 @@ except ImportError:
     scan_content_for_secrets = None  # type: ignore
     should_block_file = None  # type: ignore
     classify_source_kind = None  # type: ignore
-DEFAULT_EMBED_PROVIDER = "nvidia"
+DEFAULT_EMBED_PROVIDER = "local"
 DEFAULT_EMBED_MODELS = {
     "nvidia": "nvidia/llama-3.2-nemoretriever-300m-embed-v1",
     "google": "gemini-embedding-001",
-    "local": "sentence-transformers/all-MiniLM-L6-v2",
+    "local": "BAAI/bge-m3",
     "model2vec": "minishlab/potion-retrieval-32M",
 }
 DEFAULT_EMBED_OUTPUT_DIMS = {
