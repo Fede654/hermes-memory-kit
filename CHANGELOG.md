@@ -1,3 +1,33 @@
+## [3.9.0] — 2026-07-29
+
+### Added
+- **Corpus policy** (`scripts/corpus_policy.py`): file-level blocking
+  (never-touch filenames/globs/name-contains) + content-level secret scan
+  (structural credential patterns: private keys, API tokens, JWTs, Bearer
+  headers). Activated automatically on `add_file`, `add_text`, `ingest_any`,
+  and `update_chapter` content changes.
+- **Selective embedding**: code (`.py`, `.js`, `.sh`, etc.) and config
+  (`.yaml`, `.json`, `.toml`, etc.) files are classified at ingest time and
+  excluded from embedding — semantically indexed only via FTS5.
+  Backed by `embed_disabled` + `embed_disable_reason` columns on chapters.
+- `memoryctl stats` now reports `embed_disabled` count and
+  `embed_disabled_by_reason` breakdown.
+- `embedding_candidates()` / `embed-backfill` skip `embed_disabled` chapters.
+- `memoryctl add_file` blocks protected files (`.env`, `*.key`, `id_rsa*`,
+  `*secret*`, etc.) with exit code 2 and a rule citation.
+- `scripts/default_corpus_policy.json` — shipped default, overridable via
+  `HMK_CORPUS_POLICY` env var. Fail-closed on unreadable policy files.
+- `tests/test_corpus_policy.py` — 30 tests covering file blocking, secret
+  scan, classification, policy loading, and full integration with
+  memoryctl add_file/add_text/update/stats/embed-candidates.
+
+### Changed
+- `update_chapter` now re-scans content for secrets and updates
+  `embed_disabled` / `embed_disable_reason` accordingly. Report includes
+  the new fields.
+- `ingest_any.py` enforces file-level blocking and sets `source_kind`
+  classification for selective embedding.
+
 ## [3.8.1] — 2026-07-28
 
 ### Added

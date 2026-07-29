@@ -69,6 +69,18 @@ def _require_config(purpose: str = "this operation"):
         )
         sys.exit(2)
 LEGACY_ROOT = os.environ.get("HMK_LEGACY_ROOT", "").strip()
+
+# corpus_policy module (v3.9.0) — selective embedding + secret scan
+try:
+    from corpus_policy import (
+        scan_content_for_secrets,
+        should_block_file,
+        classify_source_kind,
+    )
+except ImportError:
+    scan_content_for_secrets = None  # type: ignore
+    should_block_file = None  # type: ignore
+    classify_source_kind = None  # type: ignore
 DEFAULT_EMBED_PROVIDER = "nvidia"
 DEFAULT_EMBED_MODELS = {
     "nvidia": "nvidia/llama-3.2-nemoretriever-300m-embed-v1",
@@ -249,6 +261,15 @@ def migrate_add_embedding_bin(con):
         con.commit()
 
 
+def migrate_add_embed_disabled(con):
+    """v3.9.0: add embed_disabled + embed_disable_reason to chapters."""
+    columns = {col["name"] for col in con.execute("PRAGMA table_info(chapters)").fetchall()}
+    if "embed_disabled" not in columns:
+        con.execute("ALTER TABLE chapters ADD COLUMN embed_disabled INTEGER NOT NULL DEFAULT 0")
+    if "embed_disable_reason" not in columns:
+        con.execute("ALTER TABLE chapters ADD COLUMN embed_disable_reason TEXT")
+
+
 def migrate_embedding_table(con):
     row = con.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='chapter_embeddings'"
@@ -390,6 +411,7 @@ def init_db():
     )
     migrate_embedding_table(con)
     migrate_add_embedding_bin(con)
+    migrate_add_embed_disabled(con)
     for name, description in DEFAULT_SHELVES.items():
         con.execute(
             "INSERT OR IGNORE INTO shelves(name, description) VALUES(?, ?)",
@@ -498,10 +520,23 @@ def add_text(shelf_name, title, raw, tags=None, importance=0.5, source_path=None
     book_id = upsert_book(con, shelf_name, title, source_path=source_path, source_kind=source_kind)
     if replace:
         clear_book_chapters(con, book_id)
+
+    # v3.9.0 — determine embed_disabled from content scan + source kind
+    embed_disabled = 0
+    embed_disable_reason = None
+    if source_kind in ("code", "config"):
+        embed_disabled = 1
+        embed_disable_reason = f"source_kind={source_kind}"
+    if embed_disabled == 0 and scan_content_for_secrets:
+        secret_reason = scan_content_for_secrets(raw)
+        if secret_reason:
+            embed_disabled = 1
+            embed_disable_reason = secret_reason
+
     cur = con.execute(
         """
-        INSERT INTO chapters(book_id, ordinal, title, spr, raw, tokens, importance, created_at, updated_at, tags_json)
-        VALUES(?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO chapters(book_id, ordinal, title, spr, raw, tokens, importance, created_at, updated_at, tags_json, embed_disabled, embed_disable_reason)
+        VALUES(?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             book_id,
@@ -513,6 +548,8 @@ def add_text(shelf_name, title, raw, tags=None, importance=0.5, source_path=None
             now_ts(),
             now_ts(),
             json.dumps(tags),
+            embed_disabled,
+            embed_disable_reason,
         ),
     )
     chapter_id = cur.lastrowid
@@ -524,7 +561,20 @@ def add_text(shelf_name, title, raw, tags=None, importance=0.5, source_path=None
 
 def add_file(path, shelf_name, title=None, tags=None, importance=0.5, replace=True):
     p = Path(path)
+
+    # v3.9.0 — file-level blocking via corpus policy
+    if should_block_file:
+        blocked, reason = should_block_file(path)
+        if blocked:
+            raise SystemExit(f"ERROR: file blocked by corpus policy: {reason}")
+
     raw = p.read_text(encoding="utf-8", errors="replace")
+
+    # v3.9.0 — classify by extension for selective embedding
+    kind = "file"
+    if classify_source_kind:
+        kind = classify_source_kind(path)
+
     return add_text(
         shelf_name=shelf_name,
         title=title or p.stem,
@@ -532,7 +582,7 @@ def add_file(path, shelf_name, title=None, tags=None, importance=0.5, replace=Tr
         tags=tags or [],
         importance=importance,
         source_path=str(p),
-        source_kind="file",
+        source_kind=kind,
         replace=replace,
     )
 
@@ -1066,13 +1116,14 @@ def embedding_candidates(provider=None, model=None, limit=0, only_missing=True):
         sql += """
         LEFT JOIN chapter_embeddings e
           ON e.chapter_id = c.id AND e.provider = ? AND e.model = ?
-        WHERE e.chapter_id IS NULL
+        WHERE c.embed_disabled = 0 AND e.chapter_id IS NULL
         """
         params.extend([provider, model])
     else:
         sql += """
         LEFT JOIN chapter_embeddings e
           ON e.chapter_id = c.id AND e.provider = ? AND e.model = ?
+        WHERE c.embed_disabled = 0
         """
         params.extend([provider, model])
     sql += " ORDER BY c.id ASC"
@@ -1599,6 +1650,15 @@ def update_chapter(chapter_id, content=None, title=None, tags=None, importance=N
     new_spr = simple_spr(new_raw)
     content_changed = (new_raw != old["raw"]) or (new_title != old["title"])
 
+    # v3.9.0 — re-scan content for secrets on content change
+    embed_disabled_new = old.get("embed_disabled", 0)
+    embed_disable_reason_new = old.get("embed_disable_reason")
+    if content_changed and scan_content_for_secrets:
+        secret_reason = scan_content_for_secrets(new_raw)
+        if secret_reason:
+            embed_disabled_new = 1
+            embed_disable_reason_new = secret_reason
+
     if title is not None and title != old["title"]:
         new_slug = slugify(title)
         collision = con.execute(
@@ -1619,7 +1679,7 @@ def update_chapter(chapter_id, content=None, title=None, tags=None, importance=N
     delete_chapter_fts(con, old)
     con.execute(
         """
-        UPDATE chapters SET title=?, spr=?, raw=?, tokens=?, importance=?, updated_at=?, tags_json=?
+        UPDATE chapters SET title=?, spr=?, raw=?, tokens=?, importance=?, updated_at=?, tags_json=?, embed_disabled=?, embed_disable_reason=?
         WHERE id=?
         """,
         (
@@ -1630,6 +1690,8 @@ def update_chapter(chapter_id, content=None, title=None, tags=None, importance=N
             new_importance,
             now_ts(),
             json.dumps(new_tags),
+            embed_disabled_new,
+            embed_disable_reason_new,
             chapter_id,
         ),
     )
@@ -1656,6 +1718,8 @@ def update_chapter(chapter_id, content=None, title=None, tags=None, importance=N
         "title": new_title,
         "tags": new_tags,
         "importance": new_importance,
+        "embed_disabled": embed_disabled_new,
+        "embed_disable_reason": embed_disable_reason_new,
     }
 
 
@@ -1739,6 +1803,21 @@ def stats():
         "embeddings": con.execute("SELECT COUNT(*) FROM chapter_embeddings").fetchone()[0],
         "links": con.execute("SELECT COUNT(*) FROM chapter_links").fetchone()[0],
         "queries": con.execute("SELECT COUNT(*) FROM queries_log").fetchone()[0],
+        "embed_disabled": con.execute(
+            "SELECT COUNT(*) FROM chapters WHERE embed_disabled=1"
+        ).fetchone()[0],
+        "embed_disabled_by_reason": [
+            dict(row)
+            for row in con.execute(
+                """
+                SELECT embed_disable_reason AS reason, COUNT(*) AS count
+                FROM chapters
+                WHERE embed_disabled=1 AND embed_disable_reason IS NOT NULL
+                GROUP BY embed_disable_reason
+                ORDER BY count DESC
+                """
+            ).fetchall()
+        ],
         "embedding_sets": [
             dict(row)
             for row in con.execute(
