@@ -18,6 +18,7 @@ import publish_collective as publication
 def create_database(
     path: Path,
     *,
+    title: str = "Lesson",
     raw: str = "Shareable operational lesson.",
     tags: list[str] | None = None,
     shelf: str = "library",
@@ -56,8 +57,8 @@ def create_database(
             (source_path, source_kind),
         )
         connection.execute(
-            "INSERT INTO chapters VALUES(1, 1, 'Lesson', ?, ?, 10, 20)",
-            (raw, json.dumps(tags)),
+            "INSERT INTO chapters VALUES(1, 1, ?, ?, ?, 10, 20)",
+            (title, raw, json.dumps(tags)),
         )
 
 
@@ -196,6 +197,34 @@ def test_short_secret_content_also_fails_closed(tmp_path):
     policy = tmp_path / "policy.json"
     create_database(database, raw="sk-abcdefghijklmnop")
     write_policy(policy)
+
+    with pytest.raises(publication.PublicationError, match="redaction policy"):
+        publication.build_plan(database, policy)
+
+
+def test_secret_in_rendered_title_fails_closed(tmp_path):
+    database = tmp_path / "library.db"
+    policy = tmp_path / "policy.json"
+    create_database(
+        database,
+        title="glpat-abcdefghijklmnopqrstuvwxyz",
+        raw="The body itself is clean.",
+    )
+    write_policy(policy)
+
+    with pytest.raises(publication.PublicationError, match="redaction policy"):
+        publication.build_plan(database, policy)
+
+
+def test_secret_in_rendered_metadata_fails_closed(tmp_path):
+    database = tmp_path / "library.db"
+    policy = tmp_path / "policy.json"
+    create_database(database)
+    value = policy_data()
+    value["entries"][0]["author_principal"] = (
+        "xoxb-abcdefghijklmnopqrstuvwxyz"
+    )
+    policy.write_text(json.dumps(value), encoding="utf-8")
 
     with pytest.raises(publication.PublicationError, match="redaction policy"):
         publication.build_plan(database, policy)
@@ -360,3 +389,27 @@ def test_revocation_removes_artifact_and_records_tombstone(fixture, tmp_path):
     assert uri in state["tombstones"]
     assert uri not in state["published"]
     assert receipt["results"][0]["result"] == "revoked"
+
+
+def test_revocation_refuses_untracked_target(fixture, tmp_path):
+    database, policy = fixture
+    destination = tmp_path / "corpus"
+    state_dir = tmp_path / "state"
+    write_policy(policy, action="revoke")
+    plan = publication.build_plan(database, policy)
+    approval = approved(tmp_path, plan)
+    target = destination / plan["actions"][0]["target"]
+    target.parent.mkdir(parents=True)
+    target.write_text("not published by this adapter", encoding="utf-8")
+
+    with pytest.raises(publication.PublicationError, match="untracked"):
+        publication.apply_plan(
+            plan,
+            approval,
+            database=database,
+            policy_path=policy,
+            destination=destination,
+            state_dir=state_dir,
+        )
+
+    assert target.read_text(encoding="utf-8") == "not published by this adapter"

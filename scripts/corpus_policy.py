@@ -72,8 +72,20 @@ _SECRET_PATTERNS = [
     (re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"), "OpenAI-style sk- key"),
     (re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"), "GitHub classic token (ghp_)"),
     (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"), "GitHub fine-grained PAT"),
-    # api_key = "<value>" or api_key: "<value>" patterns
-    (re.compile(r"api_key\s*[:=]\s*['\"][^'\"]{20,}['\"]"), "API key assignment"),
+    (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"), "Slack token"),
+    (re.compile(r"\b(?:sk|rk)_live_[A-Za-z0-9]{16,}\b"), "Stripe live key"),
+    (re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"), "Google API key"),
+    (re.compile(r"\bglpat-[0-9A-Za-z_-]{16,}\b"), "GitLab access token"),
+    (re.compile(r"\bnpm_[0-9A-Za-z]{20,}\b"), "npm access token"),
+    # Common credential assignment forms, case-insensitive.
+    (
+        re.compile(
+            r"(?:api[_-]?key|access[_-]?token|client[_-]?secret|"
+            r"secret[_-]?key|password)\s*[:=]\s*['\"][^'\"]{16,}['\"]",
+            re.IGNORECASE,
+        ),
+        "credential assignment",
+    ),
     # JWT-shaped tokens: three base64url parts separated by dots
     (re.compile(r"eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]{20,}"),
      "JWT-shaped token"),
@@ -81,8 +93,9 @@ _SECRET_PATTERNS = [
     (re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{20,}"), "Authorization: Bearer token"),
 ]
 
-# Min length for content scan — skip tiny files that can't hold credentials
-_MIN_CONTENT_BYTES = 40
+# Secret scanning is fail-closed for every byte length. Callers that only need
+# an embedding-size heuristic must apply that separately.
+_MIN_CONTENT_BYTES = 0
 
 
 def scan_content_for_secrets(
@@ -143,6 +156,16 @@ def should_block_file(file_path: str | Path) -> Tuple[bool, str]:
         if term in fname_lower:
             return True, f"filename contains '{term}': {fname}"
 
+    # A harmless basename under a credential-bearing directory is still part
+    # of a protected source tree.
+    for parent in p.parts[:-1]:
+        parent_lower = parent.lower()
+        if parent_lower in {name.lower() for name in _NEVER_TOUCH_NAMES}:
+            return True, f"never-touch parent directory: {parent}"
+        for term in _NAME_CONTAINS_BLOCKED:
+            if term in parent_lower:
+                return True, f"parent directory contains '{term}': {parent}"
+
     return False, ""
 
 
@@ -152,6 +175,7 @@ def should_block_file(file_path: str | Path) -> Tuple[bool, str]:
 
 _DEFAULT_POLICY_PATH = SCRIPT_DIR / "default_corpus_policy.json"
 _policy_cache: Optional[Dict] = None
+_policy_cache_path: Optional[Path] = None
 
 
 def load_policy() -> dict:
@@ -160,15 +184,15 @@ def load_policy() -> dict:
     Cached after first load.  Fail-closed: if HMK_CORPUS_POLICY points
     at an unreadable file, this raises SystemExit(2).
     """
-    global _policy_cache
-    if _policy_cache is not None:
-        return _policy_cache  # type: ignore[return-value]
-
     policy_env = os.environ.get("HMK_CORPUS_POLICY")
     if policy_env:
-        policy_path = Path(policy_env).expanduser()
+        policy_path = Path(policy_env).expanduser().resolve()
     else:
-        policy_path = _DEFAULT_POLICY_PATH
+        policy_path = _DEFAULT_POLICY_PATH.resolve()
+
+    global _policy_cache, _policy_cache_path
+    if _policy_cache is not None and _policy_cache_path == policy_path:
+        return _policy_cache  # type: ignore[return-value]
 
     try:
         _policy_cache = json.loads(policy_path.read_text(encoding="utf-8"))
@@ -184,4 +208,5 @@ def load_policy() -> dict:
         )
 
     assert _policy_cache is not None, "policy load succeeded but cache is None"
+    _policy_cache_path = policy_path
     return _policy_cache

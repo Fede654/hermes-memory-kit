@@ -331,11 +331,6 @@ def validate_publishable_chapter(
         raise PublicationError(
             f"chapter {chapter_id} lacks required dual-opt-in tag {PUBLISH_TAG}"
         )
-    secret = scan_content_for_secrets(chapter["raw"], minimum_bytes=0)
-    if secret:
-        raise PublicationError(
-            f"chapter {chapter_id} rejected by redaction policy: {secret}"
-        )
 
 
 def render_artifact(
@@ -400,6 +395,12 @@ def build_plan(
         chapter = read_chapter(database, entry["chapter_id"])
         validate_publishable_chapter(chapter, collections[entry["collection"]])
         markdown, metadata = render_artifact(policy, entry, chapter, timestamp)
+        secret = scan_content_for_secrets(markdown, minimum_bytes=0)
+        if secret:
+            raise PublicationError(
+                f"chapter {entry['chapter_id']} rejected by redaction policy: "
+                f"{secret}"
+            )
         actions.append(
             {
                 "action": "publish",
@@ -579,6 +580,10 @@ def apply_plan(
                 raise PublicationError("revocation target conflicts with publication state")
             if current_hash not in {None, previous.get("artifact_sha256")}:
                 raise PublicationError(f"refusing to revoke drifted artifact: {target}")
+        elif current_hash is not None:
+            raise PublicationError(
+                f"refusing to revoke untracked artifact: {target}"
+            )
         preflight.append((item, target, current_hash, current_bytes))
 
     # Close the window between source validation and target mutation.

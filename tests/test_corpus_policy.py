@@ -96,6 +96,20 @@ def test_should_accept_normal_names(fname):
     assert not blocked, f"expected {fname!r} to be accepted"
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "secrets/note.md",
+        "client-credentials/readme.txt",
+        ".env/production.txt",
+    ],
+)
+def test_should_block_protected_parent_directory(path):
+    blocked, reason = corpus_policy.should_block_file(path)
+    assert blocked
+    assert "parent" in reason
+
+
 # -------------------------------------------------------------------------
 # Content secret scan
 # -------------------------------------------------------------------------
@@ -142,11 +156,26 @@ def test_clean_content_passes():
     assert reason is None
 
 
-def test_short_content_skipped():
-    """Content under 40 chars is skipped to avoid false positives."""
+def test_short_clean_content_passes():
     text = "short"
     reason = corpus_policy.scan_content_for_secrets(text)
     assert reason is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "xoxb-abcdefghijklmno",
+        "sk_live_abcdefghijklmnop",
+        "AIzaABCDEFGHIJKLMNOPQRST",
+        "glpat-abcdefghijklmnop",
+        "npm_abcdefghijklmnopqrst",
+        'CLIENT_SECRET="abcdefghijklmnop"',
+        'Access-Token: "abcdefghijklmnop"',
+    ],
+)
+def test_standard_secret_patterns_fail_closed_at_any_length(text):
+    assert corpus_policy.scan_content_for_secrets(text) is not None
 
 
 # -------------------------------------------------------------------------
@@ -214,6 +243,20 @@ def test_fail_closed_on_missing_env_policy(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         corpus_policy.load_policy()
     assert "not readable" in str(exc.value)
+
+
+def test_policy_cache_is_keyed_by_resolved_path(tmp_path, monkeypatch):
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text('{"name":"first"}', encoding="utf-8")
+    second.write_text('{"name":"second"}', encoding="utf-8")
+    corpus_policy._policy_cache = None
+    corpus_policy._policy_cache_path = None
+
+    monkeypatch.setenv("HMK_CORPUS_POLICY", str(first))
+    assert corpus_policy.load_policy()["name"] == "first"
+    monkeypatch.setenv("HMK_CORPUS_POLICY", str(second))
+    assert corpus_policy.load_policy()["name"] == "second"
 
 
 # -------------------------------------------------------------------------
