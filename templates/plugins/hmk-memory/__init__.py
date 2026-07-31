@@ -114,9 +114,11 @@ LIBRARIAN_SCHEMA = {
     "name": "librarian",
     "description": (
         "Read, write, and inspect durable knowledge in the local HMK library "
-        "(~/.hermes/agent-memory/library.db). This is the canonical long-term "
-        "memory store: anything saved here survives across sessions and can be "
-        "retrieved later by query or exact chapter id.\n\n"
+        "(~/.hermes/agent-memory/library.db). It is authoritative for records "
+        "authored natively in HMK. Chapters ingested from an authoritative LLM "
+        "Wiki are retrieval indexes of those files, not replacement sources. "
+        "Anything saved here survives across sessions and can be retrieved by "
+        "query or exact chapter id.\n\n"
         "Actions:\\n"
         "- query: hybrid (lexical + semantic) retrieval. Returns ranked items.\\n"
         "- search: pure lexical FTS search.\\n"

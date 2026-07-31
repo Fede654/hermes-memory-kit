@@ -36,6 +36,9 @@ BASE_DIR = Path(os.environ.get(
 )).expanduser()
 DB_PATH = Path(os.environ.get("HMK_DB_PATH", str(BASE_DIR / "library.db"))).expanduser()
 VAULT_DIR = Path(os.environ.get("HMK_VAULT_DIR", str(REPO_ROOT / "wiki"))).expanduser()
+LLM_WIKI_DIR = Path(
+    os.environ.get("WIKI_PATH", str(Path.home() / "wiki"))
+).expanduser()
 
 MANIFEST_FILENAME = "projection-manifest.json"
 LIVE_DIR_NAME = "live"
@@ -46,6 +49,28 @@ LINK_TYPES = ["summarizes", "depends_on", "related_to", "evidence_for",
 DEFAULT_IDS = [int(item) for item in
                os.environ.get("HMK_EXPORT_IDS", "").split(",")
                if item.strip()]
+
+
+def validate_projection_target(
+    projection_root: Path = VAULT_DIR,
+    authoritative_wiki_root: Path = LLM_WIKI_DIR,
+) -> None:
+    """Refuse projection roots that can overwrite the authoritative LLM Wiki."""
+    projection = projection_root.resolve()
+    authoritative = authoritative_wiki_root.resolve()
+    overlap = (
+        projection == authoritative
+        or authoritative in projection.parents
+        or projection in authoritative.parents
+    )
+    if overlap:
+        raise SystemExit(
+            "ERROR: HMK projection target overlaps the authoritative LLM Wiki.\n"
+            f"  projection: {projection}\n"
+            f"  LLM Wiki : {authoritative}\n"
+            "Choose an isolated HMK_VAULT_DIR. The LLM Wiki is not generated "
+            "from HMK."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -538,6 +563,7 @@ def main():
                              "from a fresh build (drift detector)")
     args = parser.parse_args()
 
+    validate_projection_target()
     VAULT_DIR.mkdir(parents=True, exist_ok=True)
 
     fd = _lock_maintenance()

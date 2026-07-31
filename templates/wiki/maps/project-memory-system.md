@@ -4,12 +4,13 @@
 
 - human map of the memory system
 - navigable entry point
-- projected surface, not canonical
+- generated HMK projection, not an authoring surface
 
 ## Rule
 
-- canon first
-- projection after
+- HMK-native records: HMK first, projection after
+- LLM Wiki records: authoritative wiki publication, HMK retrieval index after
+- never overlap `$HMK_VAULT_DIR` and `$WIKI_PATH`
 
 ## Possible Next Maps
 

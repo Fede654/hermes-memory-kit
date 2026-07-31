@@ -25,7 +25,10 @@ Regla: library PRIMERO. Si `null_retrieval`, recién ahí grep/find.
 
 ## Wiki
 
-`wiki/` = proyección del canon. OK leerla, NO citarla como evidencia.
+The workspace `wiki/` is an HMK-generated projection. `$WIKI_PATH` may name a
+different surface: the curated LLM Wiki, authoritative for its own documents.
+Never assume they are the same path; follow
+`docs/memory-ownership-contract.md`.
 
 ## Skill de curación
 

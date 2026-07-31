@@ -1,3 +1,21 @@
+## [Unreleased]
+
+### Added
+
+- Versioned memory ownership policy and documentation assigning one
+  authoritative store per artifact class.
+- `export_obsidian.py` now refuses projection targets that overlap the
+  authoritative LLM Wiki root.
+- Tests for closed ownership mappings and projection-target isolation.
+
+### Changed
+
+- Documentation and workspace skills now distinguish the generated HMK
+  projection vault from an independently authored LLM Wiki.
+- `library.db` is described as authoritative for HMK-native records and as a
+  retrieval index for wiki-origin records, instead of as a universal source of
+  truth.
+
 ## [3.9.0] — 2026-07-29
 
 ### Added

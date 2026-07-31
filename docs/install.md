@@ -39,7 +39,8 @@ Paths you can set:
 
 - `HMK_BASE_DIR` — where memory state / DB live (default: `./agent-memory`)
 - `HMK_DB_PATH` — the SQLite library (default: `./agent-memory/library.db`)
-- `HMK_VAULT_DIR` — Obsidian-style wiki projection target (default: `./wiki`)
+- `HMK_VAULT_DIR` — generated HMK projection target (default: `./wiki`);
+  it must be disjoint from `WIKI_PATH` / the authoritative LLM Wiki
 - `HMK_WORKSPACE_ROOT` — resolved automatically by the wrapper; override if you need to
 - `HMK_HERMES_HOME` — your Hermes Agent home (only relevant if you use the optional plugin)
 - `HMK_AGENT_MEMORY_BASE` — alias for `HMK_BASE_DIR`, used by the plugin

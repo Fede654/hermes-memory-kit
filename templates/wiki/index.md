@@ -1,6 +1,6 @@
 # Wiki Index
 
-Initial projected vault for human navigation.
+Initial generated HMK projection vault for human navigation.
 
 ## Sections
 
@@ -13,5 +13,6 @@ Initial projected vault for human navigation.
 
 Reminder:
 
-- this vault does not replace `library.db`
-- factual truth still lives in the canonical memory store
+- this vault is disposable and rebuildable from `library.db`
+- it is not the independently authored LLM Wiki at `$WIKI_PATH`
+- it must never be configured to overlap that LLM Wiki
