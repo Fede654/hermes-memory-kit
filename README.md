@@ -73,7 +73,7 @@ Each agent gets its own:
 - sessions
 - plugins
 - skills
-- optional projected wiki
+- optional generated HMK projection vault
 
 That isolation matters more than it sounds.
 
@@ -92,11 +92,11 @@ This kit is opinionated about that. It would rather hard-fail than silently writ
 
 The current main branch gives you a working stack with these layers:
 
-### 1. Durable canon
+### 1. HMK-native durable canon
 
 Stored in `agent-memory/library.db`, managed by `scripts/memoryctl.py`.
 
-This is the long-term memory layer:
+This is the long-term memory layer for records authored natively in HMK:
 
 - facts;
 - plans;
@@ -118,15 +118,21 @@ This is the “pick the thread back up” layer:
 
 The continuity plugin lives in a separate repo now, but this kit vendors a pinned copy automatically.
 
-### 3. Human navigation layer
+### 3. Generated HMK navigation layer
 
 Projected into `wiki/`.
 
-This is not the source of truth. It is the reading layer:
+This is a disposable reading layer over HMK-native records:
 
 - Obsidian navigation;
 - LLM-readable maps;
 - lightweight projections of the canon.
+
+It is not the separately authored LLM Wiki normally located at `$WIKI_PATH`
+or `~/wiki`. That LLM Wiki is authoritative for its own raw evidence and
+curated notes; HMK chapters created from those files are retrieval indexes.
+The two roots must never overlap. See
+[`docs/memory-ownership-contract.md`](docs/memory-ownership-contract.md).
 
 ### 4. Operational glue
 
@@ -178,13 +184,15 @@ That is what the continuity files are for.
 Humans do not want to read raw SQLite rows.
 They want maps, notes, and curated structure.
 
-That is why the projected wiki exists.
+That is why the generated HMK projection vault exists.
 
 So the mental model is:
 
-- **canon** for truth,
+- **HMK-native canon** for native records,
 - **continuity** for re-entry,
-- **projection** for navigation.
+- **HMK projection** for disposable navigation,
+- **LLM Wiki** as the authority for documents authored through its publication
+  protocol.
 
 ```mermaid
 flowchart LR
@@ -193,7 +201,7 @@ flowchart LR
 
     LLM <-->|"memoryctl · hybrid_pack / engram_pack"| DB[("agent-memory/library.db<br/>durable canon")]
     LLM <-->|"continuity-plugin · pre/post_llm_call"| DH[/"DIALOGUE-HANDOFF.*.md<br/>working memory"/]
-    DB -.->|"export_obsidian.py"| WIKI[/"wiki/<br/>projection (Obsidian)"/]
+    DB -.->|"export_obsidian.py"| WIKI[/"workspace wiki/<br/>generated HMK projection"/]
     H --> WIKI
 ```
 
@@ -265,7 +273,7 @@ The intended daily workflow is simple:
 # Rehydrate after restart
 ./scripts/hmk continuityctl.py rehydrate
 
-# Export selected material to the projected wiki
+# Export selected HMK-native material to the isolated projection vault
 ./scripts/hmk export_obsidian.py --ids 1 2 3
 ```
 
@@ -482,7 +490,7 @@ The bet here is that disciplined local architecture beats fashionable sprawl sur
 | `scripts/memoryctl.py` | storage, retrieval, embedding config, search, hybrid-pack |
 | `scripts/continuityctl.py` | restart/rehydration helper |
 | `scripts/ingest_any.py` | normalizes documents into storable markdown |
-| `scripts/export_obsidian.py` | projects selected canon into the wiki layer |
+| `scripts/export_obsidian.py` | projects selected HMK-native records into an isolated generated vault |
 | `scripts/hmk` | workspace-aware wrapper |
 | `templates/plugins/dialogue-handoff/` | vendored continuity plugin |
 | `templates/systemd/hermes-gateway@.service` | per-agent user service template |

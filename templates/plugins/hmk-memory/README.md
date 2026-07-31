@@ -88,6 +88,11 @@ memory provider is active at a time — if you have another (`mem0`,
 When this provider is active, agents also get a `librarian` model tool for
 read/write access to the library from inside the conversation. Actions:
 
+`library.db` is authoritative for HMK-native records. When a chapter indexes a
+file published through an external LLM Wiki, that file remains authoritative;
+repair index drift from the file, never the reverse. See the kit's
+`docs/memory-ownership-contract.md`.
+
 | Action | Purpose |
 |---|---|
 | `query` | Hybrid (lexical + semantic) retrieval, ranked items |
