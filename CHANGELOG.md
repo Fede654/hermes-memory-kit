@@ -7,6 +7,12 @@
 - `export_obsidian.py` now refuses projection targets that overlap the
   authoritative LLM Wiki root.
 - Tests for closed ownership mappings and projection-target isolation.
+- Review-gated `publish_collective.py` adapter with closed policy, plan,
+  approval, state, receipt, and tombstone contracts.
+- Offline tests for dual opt-in, source ownership, private/secret rejection,
+  approval binding, idempotency, drift, rollback, and revocation.
+- Concrete mapping and rollout documentation for Mariano's
+  collective-memory corpus/index/Atlas/discovery surfaces.
 
 ### Changed
 
@@ -15,6 +21,9 @@
 - `library.db` is described as authoritative for HMK-native records and as a
   retrieval index for wiki-origin records, instead of as a universal source of
   truth.
+- Secret scanning accepts a caller-selected minimum length so publication can
+  scan even very short chapters while ordinary ingest preserves its existing
+  tiny-content behavior.
 
 ## [3.9.0] — 2026-07-29
 
