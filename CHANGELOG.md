@@ -16,6 +16,9 @@
 
 ### Changed
 
+- `hermes hmk-memory status` now accepts the dispatcher namespace like every
+  other plugin subcommand instead of crashing before its read-only status
+  report.
 - Documentation and workspace skills now distinguish the generated HMK
   projection vault from an independently authored LLM Wiki.
 - `library.db` is described as authoritative for HMK-native records and as a

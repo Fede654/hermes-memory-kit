@@ -98,7 +98,7 @@ def _get_memoryctl():
         sys.exit(2)
 
 
-def _print_status() -> int:
+def _print_status(_args=None) -> int:
     base = _resolve_base_dir()
     db_path = _resolve_db_path()
 
