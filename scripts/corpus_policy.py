@@ -85,14 +85,16 @@ _SECRET_PATTERNS = [
 _MIN_CONTENT_BYTES = 40
 
 
-def scan_content_for_secrets(text: str) -> Optional[str]:
+def scan_content_for_secrets(
+    text: str, minimum_bytes: int = _MIN_CONTENT_BYTES
+) -> Optional[str]:
     """Scan text for structural credential patterns.
 
     Returns the first matched reason string, or None if clean.
     Multiple matches collapse — first hit wins so the caller sees at
     least one concrete reason in embed_disable_reason.
     """
-    if len(text) < _MIN_CONTENT_BYTES:
+    if len(text) < minimum_bytes:
         return None
     for pattern, reason in _SECRET_PATTERNS:
         if pattern.search(text):

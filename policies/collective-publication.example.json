@@ -1,0 +1,24 @@
+{
+  "schema": "hmk-collective-publication-policy/v1",
+  "publisher_principal": "agent@example",
+  "source_instance": "agent-example",
+  "redaction_policy": "reject-secrets-no-automatic-redaction",
+  "collections": [
+    {
+      "name": "shared-knowledge",
+      "path_prefix": "shared-knowledge/hmk",
+      "allowed_shelves": [
+        "library",
+        "evidence"
+      ],
+      "allowed_classifications": [
+        "public",
+        "tribe-shared"
+      ],
+      "allowed_licenses": [
+        "CC-BY-SA-4.0"
+      ]
+    }
+  ],
+  "entries": []
+}

@@ -143,6 +143,7 @@ Scripts and templates that make the system usable instead of merely clever:
 - `continuityctl.py`
 - `ingest_any.py`
 - `export_obsidian.py`
+- `publish_collective.py`
 - `scripts/hmk`
 - systemd user-service templates
 
@@ -192,7 +193,9 @@ So the mental model is:
 - **continuity** for re-entry,
 - **HMK projection** for disposable navigation,
 - **LLM Wiki** as the authority for documents authored through its publication
-  protocol.
+  protocol,
+- **collective-memory publications** as reviewed downstream artifacts, never
+  another authoritative store.
 
 ```mermaid
 flowchart LR
@@ -202,7 +205,9 @@ flowchart LR
     LLM <-->|"memoryctl · hybrid_pack / engram_pack"| DB[("agent-memory/library.db<br/>durable canon")]
     LLM <-->|"continuity-plugin · pre/post_llm_call"| DH[/"DIALOGUE-HANDOFF.*.md<br/>working memory"/]
     DB -.->|"export_obsidian.py"| WIKI[/"workspace wiki/<br/>generated HMK projection"/]
+    DB -.->|"reviewed publish_collective.py"| CM[/"collective-memory corpus<br/>derived artifacts"/]
     H --> WIKI
+    H -->|"independent approval"| CM
 ```
 
 ---
@@ -491,6 +496,7 @@ The bet here is that disciplined local architecture beats fashionable sprawl sur
 | `scripts/continuityctl.py` | restart/rehydration helper |
 | `scripts/ingest_any.py` | normalizes documents into storable markdown |
 | `scripts/export_obsidian.py` | projects selected HMK-native records into an isolated generated vault |
+| `scripts/publish_collective.py` | plans and applies independently approved downstream publication artifacts |
 | `scripts/hmk` | workspace-aware wrapper |
 | `templates/plugins/dialogue-handoff/` | vendored continuity plugin |
 | `templates/systemd/hermes-gateway@.service` | per-agent user service template |
@@ -512,6 +518,7 @@ The README should not pretend otherwise.
 - [Install](./docs/install.md)
 - [Architecture](./docs/architecture.md)
 - [Dialogue Handoff](./docs/dialogue-handoff.md)
+- [collective-memory publication](./docs/collective-memory-publication.md)
 - [Providers](./docs/providers.md)
 - [Curation Pipeline](./docs/curation-pipeline.md)
 
