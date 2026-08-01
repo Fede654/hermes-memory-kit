@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+from argparse import Namespace
+
 import pytest
 
 
@@ -22,6 +24,13 @@ def test_register_invokes_ctx(provider_module):
     provider_module.register(Ctx())
     assert len(captured) == 1
     assert captured[0].name == "hmk-memory"
+
+
+def test_status_dispatch_accepts_argparse_namespace(cli_module, env_isolation, capsys):
+    """The common dispatcher always passes args, including for status."""
+    result = cli_module.hmk_memory_command(Namespace(hmk_memory_command="status"))
+    assert result == 2
+    assert "DB_PATH" in capsys.readouterr().out
 
 
 # ---- is_available variants -------------------------------------------------
