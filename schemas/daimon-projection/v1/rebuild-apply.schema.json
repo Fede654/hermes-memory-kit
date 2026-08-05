@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/rebuild-apply.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "plan"],
+  "properties": {
+    "schema": {"const": "hmk.daimon-projection.rebuild-apply/v1"},
+    "plan": {"$ref": "rebuild-plan.schema.json"}
+  }
+}

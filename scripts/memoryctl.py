@@ -327,6 +327,90 @@ def migrate_embedding_table(con):
     )
 
 
+DAIMON_PROJECTION_SCHEMA_VERSION = 1
+
+
+def migrate_daimon_projection(con, fault_hook=None):
+    """Atomically install the disposable Daimon projection schema."""
+    existing = con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='daimon_projection_schema'"
+    ).fetchone()
+    if existing:
+        row = con.execute(
+            "SELECT schema_version FROM daimon_projection_schema WHERE singleton=1"
+        ).fetchone()
+        if row is not None and row["schema_version"] != DAIMON_PROJECTION_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"unsupported Daimon projection schema version: {row['schema_version']}"
+            )
+    statements = (
+        """CREATE TABLE IF NOT EXISTS daimon_projection_namespaces (
+          namespace_id TEXT PRIMARY KEY, source_instance TEXT NOT NULL,
+          subject_me_id TEXT NOT NULL, projector_id TEXT NOT NULL,
+          projector_version TEXT NOT NULL, accepted_checkpoint_sequence INTEGER NOT NULL,
+          accepted_checkpoint_hash TEXT NOT NULL, generation INTEGER NOT NULL,
+          current_manifest_hash TEXT NOT NULL,
+          UNIQUE(source_instance, subject_me_id, projector_id, projector_version))""",
+        """CREATE TABLE IF NOT EXISTS daimon_projection_schema (
+          singleton INTEGER PRIMARY KEY CHECK(singleton=1), schema_version INTEGER NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS daimon_projections (
+          projection_id TEXT PRIMARY KEY,
+          namespace_id TEXT NOT NULL REFERENCES daimon_projection_namespaces(namespace_id),
+          memory_id TEXT NOT NULL, author_me_id TEXT NOT NULL, category TEXT NOT NULL,
+          head_event_id TEXT NOT NULL, head_event_hash TEXT NOT NULL,
+          head_sequence INTEGER NOT NULL, statement_hash TEXT NOT NULL,
+          statement_length INTEGER NOT NULL, statement_media_type TEXT NOT NULL,
+          classification TEXT NOT NULL, source_checkpoint_sequence INTEGER NOT NULL,
+          source_checkpoint_hash TEXT NOT NULL,
+          active INTEGER NOT NULL CHECK(active IN (0, 1)),
+          chapter_id INTEGER UNIQUE REFERENCES chapters(id) ON DELETE RESTRICT,
+          UNIQUE(namespace_id, memory_id))""",
+        """CREATE TABLE IF NOT EXISTS daimon_projection_history (
+          receipt_id TEXT PRIMARY KEY, projection_id TEXT NOT NULL,
+          request_hash TEXT NOT NULL, operation TEXT NOT NULL, receipt_json TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS daimon_projection_idempotency (
+          idempotency_key TEXT PRIMARY KEY, request_hash TEXT NOT NULL,
+          receipt_json TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS daimon_projection_rebuilds (
+          plan_id TEXT PRIMARY KEY, plan_hash TEXT NOT NULL, receipt_json TEXT NOT NULL)""",
+        "CREATE INDEX IF NOT EXISTS idx_daimon_projection_namespace ON daimon_projections(namespace_id, memory_id)",
+        "CREATE INDEX IF NOT EXISTS idx_daimon_projection_head ON daimon_projections(head_event_id, head_event_hash)",
+    )
+    try:
+        con.execute("BEGIN IMMEDIATE")
+        for index, statement in enumerate(statements):
+            con.execute(statement)
+            if fault_hook is not None:
+                fault_hook(index)
+        con.execute(
+            "INSERT OR IGNORE INTO shelves(name, description) VALUES(?, ?)",
+            (
+                "daimon-projection",
+                "Disposable Matrix-authored personal-memory retrieval projections",
+            ),
+        )
+        con.execute(
+            "INSERT OR IGNORE INTO daimon_projection_schema(singleton, schema_version) VALUES(1, ?)",
+            (DAIMON_PROJECTION_SCHEMA_VERSION,),
+        )
+        columns = {
+            row["name"] for row in con.execute("PRAGMA table_info(daimon_projections)")
+        }
+        required = {
+            "projection_id", "namespace_id", "memory_id", "author_me_id", "category",
+            "head_event_id", "head_event_hash", "head_sequence", "statement_hash",
+            "statement_length", "statement_media_type", "classification",
+            "source_checkpoint_sequence", "source_checkpoint_hash", "active", "chapter_id",
+        }
+        if not required.issubset(columns):
+            raise RuntimeError("incompatible Daimon projection table")
+        con.commit()
+    except Exception:
+        if con.in_transaction:
+            con.rollback()
+        raise
+
+
 def init_db():
     _require_config("initializing the library DB")
     con = connect()
@@ -425,6 +509,12 @@ def init_db():
     migrate_embedding_table(con)
     migrate_add_embedding_bin(con)
     migrate_add_embed_disabled(con)
+    con.commit()
+    try:
+        migrate_daimon_projection(con)
+    except Exception:
+        con.close()
+        raise
     for name, description in DEFAULT_SHELVES.items():
         con.execute(
             "INSERT OR IGNORE INTO shelves(name, description) VALUES(?, ?)",
@@ -445,6 +535,41 @@ def token_estimate(text):
 
 def normalize_text(text):
     return text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def _attach_daimon_origin(row):
+    """Expose projection provenance explicitly and remove join-only columns."""
+    fields = {
+        "projection_id": "daimon_projection_id",
+        "namespace_id": "daimon_namespace_id",
+        "source_instance": "daimon_source_instance",
+        "subject_me_id": "daimon_subject_me_id",
+        "author_me_id": "daimon_author_me_id",
+        "memory_id": "daimon_memory_id",
+        "category": "daimon_category",
+        "head_event_id": "daimon_head_event_id",
+        "head_event_hash": "daimon_head_event_hash",
+        "head_sequence": "daimon_head_sequence",
+        "statement_hash": "daimon_statement_hash",
+        "statement_media_type": "daimon_statement_media_type",
+        "classification": "daimon_classification",
+        "source_checkpoint_sequence": "daimon_source_checkpoint_sequence",
+        "source_checkpoint_hash": "daimon_source_checkpoint_hash",
+        "projector_id": "daimon_projector_id",
+        "projector_version": "daimon_projector_version",
+        "active": "daimon_active",
+    }
+    if row.get("daimon_projection_id") is None:
+        row["origin"] = {"kind": row.get("source_kind") or "hmk-native"}
+    else:
+        values = {output: row.get(source) for output, source in fields.items()}
+        values["active"] = bool(values["active"])
+        row["origin"] = {
+            "kind": "daimon-projection",
+            **values,
+        }
+    for source in fields.values():
+        row.pop(source, None)
 
 
 def simple_spr(text, max_lines=8):
@@ -475,13 +600,19 @@ def shelf_id(con, shelf_name):
 
 
 def upsert_book(con, shelf_name, title, source_path=None, source_kind="file"):
+    if source_kind == "daimon-projection":
+        raise SystemExit("Daimon projections require the versioned projection API")
     sid = shelf_id(con, shelf_name)
     slug = slugify(title)
     row = con.execute(
-        "SELECT id FROM books WHERE shelf_id=? AND slug=?",
+        "SELECT id, source_kind FROM books WHERE shelf_id=? AND slug=?",
         (sid, slug),
     ).fetchone()
     if row:
+        if "daimon-projection" in {row["source_kind"], source_kind}:
+            raise SystemExit(
+                "projection-managed books cannot be changed through generic ingest"
+            )
         con.execute(
             "UPDATE books SET title=?, source_path=?, source_kind=?, updated_at=? WHERE id=?",
             (title, source_path, source_kind, now_ts(), row["id"]),
@@ -498,6 +629,21 @@ def upsert_book(con, shelf_name, title, source_path=None, source_kind="file"):
 
 
 def clear_book_chapters(con, book_id):
+    protected = con.execute(
+        """
+        SELECT 1
+        FROM books b
+        LEFT JOIN chapters c ON c.book_id=b.id
+        LEFT JOIN daimon_projections p ON p.chapter_id=c.id
+        WHERE b.id=? AND (b.source_kind='daimon-projection' OR p.projection_id IS NOT NULL)
+        LIMIT 1
+        """,
+        (book_id,),
+    ).fetchone()
+    if protected:
+        raise SystemExit(
+            "projection-managed chapters cannot be changed through generic ingest"
+        )
     rows = con.execute(
         "SELECT id, title, spr, raw, tags_json FROM chapters WHERE book_id=?",
         (book_id,),
@@ -525,6 +671,8 @@ def delete_chapter_fts(con, row):
 
 
 def add_text(shelf_name, title, raw, tags=None, importance=0.5, source_path=None, source_kind="text", replace=True):
+    if source_kind == "daimon-projection" or shelf_name == "daimon-projection":
+        raise SystemExit("Daimon projections require the versioned projection API")
     init_db()
     raw = normalize_text(raw)
     tags = tags or []
@@ -1067,12 +1215,33 @@ def search(query, limit=12, shelves=None, exclude_shelves=None,
           c.tags_json,
           b.title AS book_title,
           b.source_path,
+          b.source_kind,
           s.name AS shelf,
+          p.projection_id AS daimon_projection_id,
+          p.memory_id AS daimon_memory_id,
+          p.author_me_id AS daimon_author_me_id,
+          p.category AS daimon_category,
+          p.head_event_id AS daimon_head_event_id,
+          p.head_event_hash AS daimon_head_event_hash,
+          p.head_sequence AS daimon_head_sequence,
+          p.statement_hash AS daimon_statement_hash,
+          p.statement_media_type AS daimon_statement_media_type,
+          p.classification AS daimon_classification,
+          p.source_checkpoint_sequence AS daimon_source_checkpoint_sequence,
+          p.source_checkpoint_hash AS daimon_source_checkpoint_hash,
+          p.active AS daimon_active,
+          n.namespace_id AS daimon_namespace_id,
+          n.source_instance AS daimon_source_instance,
+          n.subject_me_id AS daimon_subject_me_id,
+          n.projector_id AS daimon_projector_id,
+          n.projector_version AS daimon_projector_version,
           bm25(chapters_fts) AS bm25_score
         FROM chapters_fts
         JOIN chapters c ON c.id = chapters_fts.rowid
         JOIN books b ON b.id = c.book_id
         JOIN shelves s ON s.id = b.shelf_id
+        LEFT JOIN daimon_projections p ON p.chapter_id = c.id
+        LEFT JOIN daimon_projection_namespaces n ON n.namespace_id = p.namespace_id
         WHERE chapters_fts MATCH ?{extra_sql}
         LIMIT ?
         """,
@@ -1084,6 +1253,7 @@ def search(query, limit=12, shelves=None, exclude_shelves=None,
     for score, row in sorted(scored, key=lambda item: item[0], reverse=True):
         row["score"] = round(score, 4)
         row["tags"] = json.loads(row["tags_json"] or "[]")
+        _attach_daimon_origin(row)
         out.append(row)
     return out[:limit]
 
@@ -1652,10 +1822,31 @@ def expand(chapter_id):
     con = connect()
     row = con.execute(
         """
-        SELECT c.*, b.title AS book_title, b.source_path, s.name AS shelf
+        SELECT c.*, b.title AS book_title, b.source_path, b.source_kind,
+               s.name AS shelf,
+               p.projection_id AS daimon_projection_id,
+               p.memory_id AS daimon_memory_id,
+               p.author_me_id AS daimon_author_me_id,
+               p.category AS daimon_category,
+               p.head_event_id AS daimon_head_event_id,
+               p.head_event_hash AS daimon_head_event_hash,
+               p.head_sequence AS daimon_head_sequence,
+               p.statement_hash AS daimon_statement_hash,
+               p.statement_media_type AS daimon_statement_media_type,
+               p.classification AS daimon_classification,
+               p.source_checkpoint_sequence AS daimon_source_checkpoint_sequence,
+               p.source_checkpoint_hash AS daimon_source_checkpoint_hash,
+               p.active AS daimon_active,
+               n.namespace_id AS daimon_namespace_id,
+               n.source_instance AS daimon_source_instance,
+               n.subject_me_id AS daimon_subject_me_id,
+               n.projector_id AS daimon_projector_id,
+               n.projector_version AS daimon_projector_version
         FROM chapters c
         JOIN books b ON b.id = c.book_id
         JOIN shelves s ON s.id = b.shelf_id
+        LEFT JOIN daimon_projections p ON p.chapter_id = c.id
+        LEFT JOIN daimon_projection_namespaces n ON n.namespace_id = p.namespace_id
         WHERE c.id=?
         """,
         (chapter_id,),
@@ -1667,12 +1858,20 @@ def expand(chapter_id):
     data = dict(row)
     data["neighbors"] = linked_neighbors(chapter_id)
     data["tags"] = json.loads(data["tags_json"] or "[]")
+    _attach_daimon_origin(data)
     return data
 
 
 def add_link(src_id, dst_id, link_type, weight=1.0, note=None):
     init_db()
     con = connect()
+    protected = con.execute(
+        "SELECT 1 FROM daimon_projections WHERE chapter_id IN (?, ?) LIMIT 1",
+        (src_id, dst_id),
+    ).fetchone()
+    if protected:
+        con.close()
+        raise SystemExit("projection-managed chapters cannot receive generic links")
     con.execute(
         """
         INSERT OR REPLACE INTO chapter_links(src_chapter_id, dst_chapter_id, link_type, weight, note, created_at)
@@ -1899,6 +2098,13 @@ def update_chapter(chapter_id, content=None, title=None, tags=None, importance=N
     if not row:
         con.close()
         raise SystemExit(f"chapter not found: {chapter_id}")
+    if con.execute(
+        "SELECT 1 FROM daimon_projections WHERE chapter_id=?", (chapter_id,)
+    ).fetchone():
+        con.close()
+        raise SystemExit(
+            "projection-managed chapters cannot be changed through generic update"
+        )
     old = dict(row)
 
     new_raw = normalize_text(content) if content is not None else old["raw"]
@@ -2002,6 +2208,13 @@ def delete_chapter(chapter_id, prune_book=True):
     if not row:
         con.close()
         raise SystemExit(f"chapter not found: {chapter_id}")
+    if con.execute(
+        "SELECT 1 FROM daimon_projections WHERE chapter_id=?", (chapter_id,)
+    ).fetchone():
+        con.close()
+        raise SystemExit(
+            "projection-managed chapters cannot be changed through generic delete"
+        )
 
     title = row["title"]
     raw_sha256 = text_hash(row["raw"] or "")

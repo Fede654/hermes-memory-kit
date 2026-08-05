@@ -2,6 +2,13 @@
 
 ### Added
 
+- Provenance-safe Daimon Matrix personal-memory projection API with closed
+  canonical requests/receipts, exact predecessor and checkpoint enforcement,
+  idempotent create/advance/retract, deterministic scoped rebuild and explicit
+  retrieval origin.
+- Atomic projection schema migration, protected generic mutation/publication
+  boundaries, public JSON schemas and byte-reproducible interoperability
+  vectors.
 - Versioned memory ownership policy and documentation assigning one
   authoritative store per artifact class.
 - `export_obsidian.py` now refuses projection targets that overlap the

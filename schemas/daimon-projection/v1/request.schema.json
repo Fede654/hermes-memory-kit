@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/request.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "adapter", "request_id", "idempotency_key", "operation", "target", "source_instance", "subject_me_id", "author_me_id", "memory_id", "category", "head", "statement", "projector", "source_checkpoint"],
+  "properties": {
+    "schema": {"const": "hmk.daimon-projection.request/v1"},
+    "adapter": {"type": "object", "additionalProperties": false, "required": ["id", "version"], "properties": {"id": {"const": "hmk-daimon-projection"}, "version": {"const": "1.0.0"}}},
+    "request_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "idempotency_key": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+    "operation": {"enum": ["project", "advance", "retract"]},
+    "target": {"$ref": "common.schema.json#/$defs/target"},
+    "source_instance": {"$ref": "common.schema.json#/$defs/scoped"},
+    "subject_me_id": {"$ref": "common.schema.json#/$defs/me_id"},
+    "author_me_id": {"$ref": "common.schema.json#/$defs/me_id"},
+    "memory_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "category": {"enum": ["personal-experience", "personal-insight", "personal-skill"]},
+    "head": {"$ref": "common.schema.json#/$defs/head"},
+    "statement": {"oneOf": [{"type": "null"}, {"$ref": "common.schema.json#/$defs/statement"}]},
+    "projector": {"$ref": "common.schema.json#/$defs/projector"},
+    "source_checkpoint": {"$ref": "common.schema.json#/$defs/checkpoint"}
+  },
+  "allOf": [
+    {"if": {"properties": {"operation": {"const": "project"}}}, "then": {"properties": {"head": {"properties": {"sequence": {"const": 1}, "predecessor_event_id": {"type": "null"}, "predecessor_hash": {"type": "null"}}}, "statement": {"$ref": "common.schema.json#/$defs/statement"}}}},
+    {"if": {"properties": {"operation": {"const": "advance"}}}, "then": {"properties": {"head": {"properties": {"sequence": {"minimum": 2}, "predecessor_event_id": {"$ref": "common.schema.json#/$defs/uuid"}, "predecessor_hash": {"$ref": "common.schema.json#/$defs/hash"}}}, "statement": {"$ref": "common.schema.json#/$defs/statement"}}}},
+    {"if": {"properties": {"operation": {"const": "retract"}}}, "then": {"properties": {"head": {"properties": {"sequence": {"minimum": 2}, "predecessor_event_id": {"$ref": "common.schema.json#/$defs/uuid"}, "predecessor_hash": {"$ref": "common.schema.json#/$defs/hash"}}}, "statement": {"type": "null"}}}}
+  ]
+}

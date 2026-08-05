@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/rebuild-plan.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "plan_id", "request_id", "idempotency_key", "target", "namespace", "namespace_id", "source_checkpoint", "entries", "manifest_hash", "prior"],
+  "properties": {
+    "schema": {"const": "hmk.daimon-projection.rebuild-plan/v1"},
+    "plan_id": {"$ref": "common.schema.json#/$defs/plan_id"},
+    "request_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "idempotency_key": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+    "target": {"$ref": "common.schema.json#/$defs/target"},
+    "namespace": {"$ref": "common.schema.json#/$defs/namespace"},
+    "namespace_id": {"$ref": "common.schema.json#/$defs/namespace_id"},
+    "source_checkpoint": {"$ref": "common.schema.json#/$defs/checkpoint"},
+    "entries": {"type": "array", "maxItems": 4096, "items": {"$ref": "common.schema.json#/$defs/rebuild_entry"}},
+    "manifest_hash": {"$ref": "common.schema.json#/$defs/hash"},
+    "prior": {"oneOf": [{"type": "null"}, {"$ref": "common.schema.json#/$defs/rebuild_prior"}]}
+  }
+}

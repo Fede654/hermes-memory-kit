@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/rebuild-request.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "request_id", "idempotency_key", "target", "source_instance", "subject_me_id", "projector", "source_checkpoint", "entries"],
+  "properties": {
+    "schema": {"const": "hmk.daimon-projection.rebuild-request/v1"},
+    "request_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "idempotency_key": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+    "target": {"$ref": "common.schema.json#/$defs/target"},
+    "source_instance": {"$ref": "common.schema.json#/$defs/scoped"},
+    "subject_me_id": {"$ref": "common.schema.json#/$defs/me_id"},
+    "projector": {"$ref": "common.schema.json#/$defs/projector"},
+    "source_checkpoint": {"$ref": "common.schema.json#/$defs/checkpoint"},
+    "entries": {"type": "array", "maxItems": 4096, "items": {"$ref": "common.schema.json#/$defs/rebuild_entry"}}
+  }
+}

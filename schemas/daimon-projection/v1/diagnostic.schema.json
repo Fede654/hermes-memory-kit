@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/diagnostic.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "code"],
+  "properties": {
+    "schema": {"const": "hmk.daimon-projection.diagnostic/v1"},
+    "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,127}$"}
+  }
+}

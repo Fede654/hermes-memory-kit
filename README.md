@@ -493,6 +493,8 @@ The bet here is that disciplined local architecture beats fashionable sprawl sur
 |---|---|
 | `scripts/bootstrap_agent.py` | creates or upgrades self-contained agent workspaces |
 | `scripts/memoryctl.py` | storage, retrieval, embedding config, search, hybrid-pack |
+| `scripts/daimon_projection.py` | closed local API for disposable Daimon Matrix personal-memory retrieval views |
+| `scripts/generate_daimon_projection_vectors.py` | regenerates byte-stable projection interoperability vectors |
 | `scripts/continuityctl.py` | restart/rehydration helper |
 | `scripts/ingest_any.py` | normalizes documents into storable markdown |
 | `scripts/export_obsidian.py` | projects selected HMK-native records into an isolated generated vault |
@@ -517,6 +519,7 @@ The README should not pretend otherwise.
 
 - [Install](./docs/install.md)
 - [Architecture](./docs/architecture.md)
+- [Daimon personal-memory projection](./docs/daimon-projection.md)
 - [Dialogue Handoff](./docs/dialogue-handoff.md)
 - [collective-memory publication](./docs/collective-memory-publication.md)
 - [Providers](./docs/providers.md)
