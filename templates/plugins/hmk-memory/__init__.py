@@ -418,6 +418,12 @@ class HMKMemoryProvider(MemoryProvider):
         except Exception as e:
             logger.error("librarian tool failed: %s", e, exc_info=True)
             return json.dumps({"success": False, "error": f"librarian tool failed: {e}"}, ensure_ascii=False)
+        except SystemExit as e:
+            # memoryctl is also a CLI and historically used SystemExit for
+            # operational errors.  A plugin call must never let that terminate
+            # the Hermes gateway process.
+            logger.error("librarian tool failed: %s", e, exc_info=True)
+            return json.dumps({"success": False, "error": f"librarian tool failed: {e}"}, ensure_ascii=False)
 
     # ---- config (env-var-only, no setup wizard) -----------------------
 
@@ -468,6 +474,9 @@ class HMKMemoryProvider(MemoryProvider):
                 return ""
             return self._render_items(items)
         except Exception as e:  # pragma: no cover - defensive
+            logger.warning("hmk-memory prefetch failed: %s", e)
+            return ""
+        except SystemExit as e:  # pragma: no cover - defensive
             logger.warning("hmk-memory prefetch failed: %s", e)
             return ""
 
