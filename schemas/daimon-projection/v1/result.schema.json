@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/result.schema.json",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "target", "namespace", "projection"],
+      "properties": {
+        "schema": {"const": "hmk.daimon-projection.inspect-result/v1"},
+        "target": {"$ref": "common.schema.json#/$defs/target"},
+        "namespace": {"$ref": "common.schema.json#/$defs/namespace"},
+        "projection": {"$ref": "common.schema.json#/$defs/state_detail"}
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "target", "namespace", "namespace_id", "generation", "source_checkpoint", "manifest_hash", "logical_hash", "projections"],
+      "properties": {
+        "schema": {"const": "hmk.daimon-projection.verify-result/v1"},
+        "target": {"$ref": "common.schema.json#/$defs/target"},
+        "namespace": {"$ref": "common.schema.json#/$defs/namespace"},
+        "namespace_id": {"$ref": "common.schema.json#/$defs/namespace_id"},
+        "generation": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "source_checkpoint": {"$ref": "common.schema.json#/$defs/checkpoint"},
+        "manifest_hash": {"$ref": "common.schema.json#/$defs/hash"},
+        "logical_hash": {"$ref": "common.schema.json#/$defs/hash"},
+        "projections": {"type": "array", "maxItems": 4096, "items": {"$ref": "common.schema.json#/$defs/state"}}
+      }
+    }
+  ]
+}

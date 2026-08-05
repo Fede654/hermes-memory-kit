@@ -1,0 +1,1 @@
+{"projector":{"id":"matrix:personal-memory-projector","version":"1.0.0"},"schema":"hmk.daimon-projection.verify/v1","source_instance":"matrix:vector-instance","subject_me_id":"dm:being:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","target":{"api_version":"1.0.0","instance_id":"hmk:vector-instance","schema_version":1}}

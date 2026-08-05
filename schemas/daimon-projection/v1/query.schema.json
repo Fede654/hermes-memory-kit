@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/query.schema.json",
+  "oneOf": [
+    {"type": "object", "additionalProperties": false, "required": ["schema", "target", "source_instance", "subject_me_id", "memory_id", "projector"], "properties": {"schema": {"const": "hmk.daimon-projection.inspect/v1"}, "target": {"$ref": "common.schema.json#/$defs/target"}, "source_instance": {"$ref": "common.schema.json#/$defs/scoped"}, "subject_me_id": {"$ref": "common.schema.json#/$defs/me_id"}, "memory_id": {"$ref": "common.schema.json#/$defs/uuid"}, "projector": {"$ref": "common.schema.json#/$defs/projector"}}},
+    {"type": "object", "additionalProperties": false, "required": ["schema", "target", "source_instance", "subject_me_id", "projector"], "properties": {"schema": {"const": "hmk.daimon-projection.verify/v1"}, "target": {"$ref": "common.schema.json#/$defs/target"}, "source_instance": {"$ref": "common.schema.json#/$defs/scoped"}, "subject_me_id": {"$ref": "common.schema.json#/$defs/me_id"}, "projector": {"$ref": "common.schema.json#/$defs/projector"}}}
+  ]
+}

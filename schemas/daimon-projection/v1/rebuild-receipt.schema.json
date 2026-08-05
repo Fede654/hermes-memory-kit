@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/rebuild-receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "receipt_id", "plan_id", "plan_hash", "target", "namespace_id", "generation", "source_checkpoint", "manifest_hash", "projection_ids", "outcome"],
+  "properties": {
+    "schema": {"const": "hmk.daimon-projection.rebuild-receipt/v1"},
+    "receipt_id": {"$ref": "common.schema.json#/$defs/receipt_id"},
+    "plan_id": {"$ref": "common.schema.json#/$defs/plan_id"},
+    "plan_hash": {"$ref": "common.schema.json#/$defs/hash"},
+    "target": {"$ref": "common.schema.json#/$defs/target"},
+    "namespace_id": {"$ref": "common.schema.json#/$defs/namespace_id"},
+    "generation": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "source_checkpoint": {"$ref": "common.schema.json#/$defs/checkpoint"},
+    "manifest_hash": {"$ref": "common.schema.json#/$defs/hash"},
+    "projection_ids": {"type": "array", "maxItems": 4096, "items": {"$ref": "common.schema.json#/$defs/projection_id"}},
+    "outcome": {"const": "rebuilt"}
+  }
+}

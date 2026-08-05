@@ -30,6 +30,7 @@ Deleting or regenerating the LLM Wiki from HMK is forbidden.
 | HMK-native identity/state/plan/episode/atomic note | `library.db` | HMK projection vault is disposable navigation |
 | Live project branch/blocker/task state | Project `MEMORY.md` and GitHub | May be linked, never copied as durable wiki truth |
 | Dialogue continuity | Session log and `DIALOGUE-HANDOFF.md` | HMK retrieval may supplement, not replace it |
+| Daimon `/me` personal memory | Daimon Matrix signed/evented memory ledger | HMK `daimon-projection` row is a disposable retrieval view |
 
 An HMK `library` shelf can therefore contain both authoritative HMK-native
 records and rebuildable indexes of LLM Wiki notes. Shelf alone does not decide
@@ -39,6 +40,9 @@ authority. The record's origin does:
   `origin=native`;
 - a record created by `wiki_publish` has a wiki source path and content hash
   in its publication receipt and is an index of that file.
+- a record created by `daimon_projection.py` has explicit Matrix source,
+  subject/author, memory/head, classification, checkpoint and projector fields;
+  its projection history is audit evidence but Matrix remains authoritative.
 
 Until HMK persists origin fields directly, the verified `wiki_publish` receipt,
 source path, file hash, tags, and `derived_from` edge are the provenance
@@ -68,6 +72,14 @@ Write drafts under the configured staging directory and publish through
 The files are authoritative. A failed or missing HMK index is repaired from the
 files; it is not a reason to overwrite the files with an older DB chapter.
 
+### Daimon personal-memory projection
+
+Write only through the closed `daimon_projection.py` API. Generic HMK ingest,
+update, delete, linking and collective publication reject projection-managed
+chapters. Correction/retraction follows Matrix event predecessors; rebuild is
+limited to one exact source/subject/projector namespace. See
+[the Daimon projection contract](daimon-projection.md).
+
 ## Drift resolution
 
 | Drift | Resolution |
@@ -75,6 +87,7 @@ files; it is not a reason to overwrite the files with an older DB chapter.
 | Wiki file hash differs from its declared raw hash | Stop; preserve both versions and investigate source mutation |
 | Wiki file differs from its indexed HMK chapter | Re-index HMK from the wiki file after a verified DB snapshot |
 | HMK-native record differs from projection note | Rebuild the projection from HMK |
+| Daimon projection differs from Matrix source head | Stop retrieval for that namespace and rebuild it from Matrix; never write the HMK value back as source truth |
 | Project `MEMORY.md` disagrees with Git branch/runtime | Git/runtime wins for mechanical state; repair `MEMORY.md` |
 | Publication receipt or provenance edge is missing | Treat HMK copy as untrusted index; rebuild the full chain through the gate |
 
@@ -88,6 +101,8 @@ after preservation and validation.
 - HMK recovery uses a SQLite backup API snapshot with integrity and
   foreign-key checks. A wiki index is not a database backup.
 - HMK projection recovery deletes/rebuilds the isolated projection vault.
+- Daimon projection recovery verifies its receipts/checkpoint and atomically
+  rebuilds one namespace from Matrix.
 - Project operational recovery reconciles GitHub, Git, runtime, then
   `MEMORY.md` in that order.
 
@@ -101,3 +116,7 @@ The adapter publishes immutable, provenance-bearing versions:
 - HMK-native records cite the HMK record ID, content hash, and memory policy;
 - updates create a new version and supersession edge;
 - deletions become tombstones, never silent disappearance.
+
+Daimon projection rows are excluded from the current HMK-native publication
+adapter. Publication, if later designed, must be a distinct reviewed derivation
+that preserves Matrix provenance and consent.
