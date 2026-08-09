@@ -93,6 +93,17 @@ DEFAULT_EMBED_OUTPUT_DIMS = {
     "google": 768,
     "model2vec": 512,
 }
+
+
+class EmbeddingBackendError(RuntimeError):
+    """Raised when the selected embedding backend cannot serve a request.
+
+    This is deliberately an Exception, not SystemExit: memoryctl is imported
+    as a library by the hmk-memory plugin, and a missing optional backend must
+    never terminate the Hermes gateway process.
+    """
+
+
 LOCAL_MODEL_CACHE = {}
 MODEL2VEC_CACHE = {}
 FLASHRANK_CACHE = {}
@@ -831,7 +842,7 @@ def embed_texts_nvidia(texts, input_type="passage", model=None):
     model = normalize_embed_model("nvidia", model)
     api_key = read_env_key("NVIDIA_API_KEY")
     if not api_key:
-        raise SystemExit("missing NVIDIA_API_KEY")
+        raise EmbeddingBackendError("missing NVIDIA_API_KEY")
     payload = json.dumps(
         {
             "model": model,
@@ -853,7 +864,9 @@ def embed_texts_nvidia(texts, input_type="passage", model=None):
         body = json.loads(resp.read().decode())
     data = body.get("data", [])
     if len(data) != len(texts):
-        raise SystemExit(f"unexpected embedding response size: expected {len(texts)}, got {len(data)}")
+        raise EmbeddingBackendError(
+            f"unexpected embedding response size: expected {len(texts)}, got {len(data)}"
+        )
     return [item["embedding"] for item in data]
 
 
@@ -863,7 +876,7 @@ def embed_texts_google(texts, input_type="passage", model=None, output_dimension
     model = normalize_embed_model("google", model)
     api_key = read_env_key("GEMINI_API_KEY") or read_env_key("GOOGLE_API_KEY")
     if not api_key:
-        raise SystemExit("missing GEMINI_API_KEY or GOOGLE_API_KEY")
+        raise EmbeddingBackendError("missing GEMINI_API_KEY or GOOGLE_API_KEY")
 
     model_resource = model if model.startswith("models/") else f"models/{model}"
     requests = []
@@ -890,28 +903,31 @@ def embed_texts_google(texts, input_type="passage", model=None, output_dimension
         body = json.loads(resp.read().decode())
     data = body.get("embeddings", [])
     if len(data) != len(texts):
-        raise SystemExit(f"unexpected google embedding response size: expected {len(texts)}, got {len(data)}")
+        raise EmbeddingBackendError(
+            f"unexpected google embedding response size: expected {len(texts)}, got {len(data)}"
+        )
     vectors = []
     for item in data:
         values = item.get("values")
         if values is None:
-            raise SystemExit("google embedding response missing values")
+            raise EmbeddingBackendError("google embedding response missing values")
         vectors.append(values)
     return vectors
 
 
 def embed_texts_local(texts, input_type="passage", model=None):
     model = normalize_embed_model("local", model)
+    device = (read_env_key("HERMES_EMBED_DEVICE") or "cuda").strip().lower()
     try:
         from sentence_transformers import SentenceTransformer
     except Exception as exc:
-        raise SystemExit(
+        raise EmbeddingBackendError(
             "local embedding backend unavailable: install a compatible sentence-transformers stack first"
         ) from exc
 
-    cache_key = (model,)
+    cache_key = (model, device)
     if cache_key not in LOCAL_MODEL_CACHE:
-        LOCAL_MODEL_CACHE[cache_key] = SentenceTransformer(model)
+        LOCAL_MODEL_CACHE[cache_key] = SentenceTransformer(model, device=device)
     encoder = LOCAL_MODEL_CACHE[cache_key]
 
     prepared = texts
@@ -932,7 +948,7 @@ def embed_texts_model2vec(texts, input_type="passage", model=None):
     try:
         from model2vec import StaticModel
     except Exception as exc:
-        raise SystemExit(
+        raise EmbeddingBackendError(
             "model2vec backend unavailable: pip install model2vec (CPU-only static embeddings)"
         ) from exc
     cache_key = (model,)
@@ -959,7 +975,7 @@ def embed_texts(provider, texts, input_type="passage", model=None, output_dimens
         return embed_texts_local(texts, input_type=input_type, model=model)
     if provider == "model2vec":
         return embed_texts_model2vec(texts, input_type=input_type, model=model)
-    raise SystemExit(f"unsupported embedding provider: {provider}")
+    raise EmbeddingBackendError(f"unsupported embedding provider: {provider}")
 
 
 def quantize_binary(vector):

@@ -137,6 +137,7 @@ def env_isolation(monkeypatch):
         "HMK_PROVIDER_QUOTA_PROCEDURAL",
         "HMK_PROVIDER_SHELVES",
         "HMK_MEMORYCTL_PATH",
+        "HERMES_EMBED_DEVICE",
     ):
         monkeypatch.delenv(k, raising=False)
 

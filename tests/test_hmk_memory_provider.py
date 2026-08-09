@@ -236,6 +236,26 @@ def test_prefetch_swallows_exceptions(
     assert p.prefetch("anything") == ""
 
 
+def test_prefetch_swallows_legacy_system_exit(
+    provider_module, env_isolation, monkeypatch, tmp_db_factory
+):
+    """Legacy memoryctl exits must not terminate the Hermes gateway."""
+    p = _initialized(provider_module, monkeypatch, tmp_db_factory)
+    p._memoryctl = _FakeMC(raises=SystemExit("backend unavailable"))
+    assert p.prefetch("anything") == ""
+
+
+def test_librarian_contains_legacy_system_exit(
+    provider_module, env_isolation, monkeypatch, tmp_db_factory
+):
+    """A legacy SystemExit from memoryctl becomes a JSON tool error."""
+    p = _initialized(provider_module, monkeypatch, tmp_db_factory)
+    p._memoryctl = _FakeMC(raises=SystemExit("backend unavailable"))
+    result = p.handle_tool_call("librarian", {"action": "query", "query": "anything"})
+    assert '"success": false' in result
+    assert "backend unavailable" in result
+
+
 # ---- system_prompt_block adapts to retriever -------------------------------
 
 def test_system_prompt_block_engram_mode(
