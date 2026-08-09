@@ -2,6 +2,9 @@
 
 ### Added
 
+- `HERMES_EMBED_DEVICE` selects the device used by the local
+  `sentence-transformers` backend (`cuda` by default, `cpu` for zero-VRAM
+  multi-session deployments). The in-process encoder cache is device-aware.
 - Provenance-safe Daimon Matrix personal-memory projection API with closed
   canonical requests/receipts, exact predecessor and checkpoint enforcement,
   idempotent create/advance/retract, deterministic scoped rebuild and explicit

@@ -917,6 +917,7 @@ def embed_texts_google(texts, input_type="passage", model=None, output_dimension
 
 def embed_texts_local(texts, input_type="passage", model=None):
     model = normalize_embed_model("local", model)
+    device = (read_env_key("HERMES_EMBED_DEVICE") or "cuda").strip().lower()
     try:
         from sentence_transformers import SentenceTransformer
     except Exception as exc:
@@ -924,9 +925,9 @@ def embed_texts_local(texts, input_type="passage", model=None):
             "local embedding backend unavailable: install a compatible sentence-transformers stack first"
         ) from exc
 
-    cache_key = (model,)
+    cache_key = (model, device)
     if cache_key not in LOCAL_MODEL_CACHE:
-        LOCAL_MODEL_CACHE[cache_key] = SentenceTransformer(model)
+        LOCAL_MODEL_CACHE[cache_key] = SentenceTransformer(model, device=device)
     encoder = LOCAL_MODEL_CACHE[cache_key]
 
     prepared = texts
