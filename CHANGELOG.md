@@ -1,5 +1,31 @@
 ## [Unreleased]
 
+## [3.10.0] — 2026-08-18
+
+Merge of `nicoechaniz/main` into the Fede654 fork — a union of two parallel
+lines of work, not a takeover of either.
+
+### Added
+- **Three memory tools, coexisting**: `remember` / `recall` (this fork's
+  deliberate write/read path) alongside `librarian` (upstream's corpus
+  add/query/expand/update/delete/stats). They are complementary; each fork's
+  test had asserted its own tool was the only one.
+- From upstream: `EmbeddingBackendError` + plugin-side `SystemExit` guards,
+  local bge-m3 embedding default, `HERMES_EMBED_DEVICE`, corpus policy with
+  selective embedding, atomic projection for `export_obsidian`, maintenance
+  flock for batch commands, memory-ownership boundaries, update/delete parity.
+
+### Fixed
+- **The ollama embedding provider could kill the Hermes gateway.** `memoryctl`
+  is imported *inside* the gateway process, so its `SystemExit` on backend
+  failure terminates the agent. Upstream fixed this for the hosted providers;
+  the ollama path (added on this fork) still raised `SystemExit`, and it is the
+  provider most exposed to it — the backend is typically a separate LAN GPU
+  host, so a reboot or power loss is an ordinary event, not an edge case.
+  Malformed responses, short responses, dimensionality parse failures **and the
+  HTTP call itself** now raise `EmbeddingBackendError`. Covered by 5 tests.
+
+
 ### Added
 
 - `HERMES_EMBED_DEVICE` selects the device used by the local
@@ -122,7 +148,7 @@
   `add_text`, `add_file`, `expand`, `stats`, `add_link` actions over the
   canonical library.db, plus `hermes hmk-memory` CLI commands.
   (Shipped deployed-but-uncommitted; committed retroactively with 3.8.1.)
-## [3.8.0] — 2026-06-17
+## [3.8.0-fork.1] — 2026-06-17 (Fede654 fork; upstream shipped a different 3.8.0)
 
 ### Added
 - `hmk-memory` provider: **write + organic growth**. Beyond per-turn prefetch
