@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+from argparse import Namespace
+
 import pytest
 
 
@@ -22,6 +24,13 @@ def test_register_invokes_ctx(provider_module):
     provider_module.register(Ctx())
     assert len(captured) == 1
     assert captured[0].name == "hmk-memory"
+
+
+def test_status_dispatch_accepts_argparse_namespace(cli_module, env_isolation, capsys):
+    """The common dispatcher always passes args, including for status."""
+    result = cli_module.hmk_memory_command(Namespace(hmk_memory_command="status"))
+    assert result == 2
+    assert "DB_PATH" in capsys.readouterr().out
 
 
 # ---- is_available variants -------------------------------------------------
@@ -227,6 +236,26 @@ def test_prefetch_swallows_exceptions(
     assert p.prefetch("anything") == ""
 
 
+def test_prefetch_swallows_legacy_system_exit(
+    provider_module, env_isolation, monkeypatch, tmp_db_factory
+):
+    """Legacy memoryctl exits must not terminate the Hermes gateway."""
+    p = _initialized(provider_module, monkeypatch, tmp_db_factory)
+    p._memoryctl = _FakeMC(raises=SystemExit("backend unavailable"))
+    assert p.prefetch("anything") == ""
+
+
+def test_librarian_contains_legacy_system_exit(
+    provider_module, env_isolation, monkeypatch, tmp_db_factory
+):
+    """A legacy SystemExit from memoryctl becomes a JSON tool error."""
+    p = _initialized(provider_module, monkeypatch, tmp_db_factory)
+    p._memoryctl = _FakeMC(raises=SystemExit("backend unavailable"))
+    result = p.handle_tool_call("librarian", {"action": "query", "query": "anything"})
+    assert '"success": false' in result
+    assert "backend unavailable" in result
+
+
 # ---- system_prompt_block adapts to retriever -------------------------------
 
 def test_system_prompt_block_engram_mode(
@@ -247,13 +276,24 @@ def test_system_prompt_block_hybrid_mode(
 
 # ---- required no-op methods ------------------------------------------------
 
-def test_get_tool_schemas_exposes_remember_recall(provider_module):
+def test_get_tool_schemas_exposes_all_three_tools(provider_module):
+    """remember/recall (agent write path) and librarian (corpus) coexist.
+
+    They were developed in parallel on two forks; each side's test asserted its
+    own tool was the ONLY one. Both invariants still hold, per tool.
+    """
     schemas = provider_module.HMKMemoryProvider().get_tool_schemas()
     names = [s["name"] for s in schemas]
-    assert names == ["remember", "recall"]
+    assert names == ["remember", "recall", "librarian"]
+
     # flat schema shape the MemoryManager indexes (top-level name + parameters,
     # NOT the OpenAI-nested {"type":"function",...} form which would be dropped)
     assert all("parameters" in s and "type" not in s for s in schemas)
+
+    librarian = next(s for s in schemas if s["name"] == "librarian")
+    actions = set(librarian["parameters"]["properties"]["action"]["enum"])
+    # invariant: the full lifecycle is reachable, not a snapshot of the enum
+    assert {"query", "search", "add_text", "add_file", "expand", "update", "delete", "stats", "add_link"} <= actions
 
 
 def test_handle_tool_call_unknown_tool_returns_error(provider_module):

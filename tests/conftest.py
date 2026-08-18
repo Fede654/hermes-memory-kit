@@ -21,6 +21,7 @@ _PROVIDER_INIT = (
     / "hmk-memory"
     / "__init__.py"
 )
+_CLI_MODULE = _PROVIDER_INIT.with_name("cli.py")
 
 
 def _create_chapters_table(con: sqlite3.Connection, *, with_engram: bool) -> None:
@@ -136,6 +137,7 @@ def env_isolation(monkeypatch):
         "HMK_PROVIDER_QUOTA_PROCEDURAL",
         "HMK_PROVIDER_SHELVES",
         "HMK_MEMORYCTL_PATH",
+        "HERMES_EMBED_DEVICE",
     ):
         monkeypatch.delenv(k, raising=False)
 
@@ -153,6 +155,20 @@ def provider_module():
     if name in sys.modules:
         return sys.modules[name]
     spec = iu.spec_from_file_location(name, _PROVIDER_INIT)
+    mod = iu.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    sys.modules[name] = mod
+    return mod
+
+
+@pytest.fixture
+def cli_module():
+    """Import the plugin CLI module from its hyphenated template directory."""
+    name = "hmk_memory_cli_under_test"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = iu.spec_from_file_location(name, _CLI_MODULE)
     mod = iu.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(mod)

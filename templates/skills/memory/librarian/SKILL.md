@@ -1,6 +1,6 @@
 ---
 name: librarian
-description: Query, expand, and curate the local Hermes memory library stored in this agent's `agent-memory/library.db`, with `wiki/` as a projected navigation layer. Use this when durable project memory, legacy context, architecture notes, or current memory-state orientation are needed.
+description: Query and curate the local HMK library, distinguishing HMK-native authority from LLM Wiki records that HMK indexes for retrieval.
 version: 2.0.0
 author: Local System
 license: MIT
@@ -37,8 +37,10 @@ Paths referenced below (e.g. `agent-memory/state/NOW.md`, `wiki/index.md`) are *
 - Never write to `$HERMES_HOME/SOUL.md` through memory maintenance flows
 - Do not treat `MEMORY.md` as the hot write path
 - Use `expand` only for items already selected as relevant
-- Treat `wiki/` as a projected map layer, not as the canonical store
-- For evidence or precise continuity, fall back to `library.db`
+- Treat the workspace `wiki/` as a disposable HMK projection.
+- Treat `$WIKI_PATH` as a separate, authoritative LLM Wiki for its raw and
+  curated files. HMK copies of those files are retrieval indexes.
+- For HMK-native records and precise continuity, use `library.db`.
 
 ## Core Commands
 
@@ -126,14 +128,15 @@ Current modular stack:
 - `pandoc` for broad document conversion
 - `mammoth` as DOCX fallback
 
-### 8. Inspect the projected wiki layer
+### 8. Inspect the generated HMK projection layer
 
 ```bash
 sed -n '1,200p' wiki/index.md
 sed -n '1,200p' wiki/maps/project-memory-system.md
 ```
 
-Use this when the user wants a high-level map, topic navigation, or conceptual grouping before diving into canonical memory.
+Use this only for navigation over HMK-native records. Do not confuse it with
+the independently authored LLM Wiki at `$WIKI_PATH`.
 
 ### 9. Fast continuity rehydration
 
@@ -253,15 +256,22 @@ The handoff system is infrastructure; from the user's perspective, you just reme
 
 ## Curation Workflow For New Documentation
 
-When new documentation enters the system, do not jump straight to wiki projection.
+When new documentation enters the system, classify its authority first.
 
-Default flow:
+HMK-native flow:
 
 1. normalize and ingest the source into canonical memory
 2. retrieve related context with `hybrid-pack`
 3. inspect the wiki only as a conceptual map layer
 4. decide the curation outcome
-5. write canon first, projection second
+5. write HMK first, optional isolated HMK projection second
+
+LLM Wiki flow:
+
+1. stage raw evidence and a curated note outside `$WIKI_PATH`
+2. publish through `wiki_publish`
+3. verify the HMK evidence/library indexes and `derived_from` edge
+4. repair index drift from the authoritative wiki files, never the reverse
 
 ### Minimal curation loop
 
@@ -300,9 +310,10 @@ sed -n '1,220p' wiki/maps/project-memory-system.md
 
 ### Hard rule
 
-- `library.db` is canonical
-- wiki is curation support, not canonical truth
-- do not write wiki-first and hope to reconcile later
+- `library.db` is authoritative for HMK-native records
+- `$WIKI_PATH` is authoritative for LLM Wiki-authored records
+- the workspace projection vault is disposable
+- every artifact has one authority; follow the v1 memory ownership policy
 
 Detailed contract: `agent-memory/plans/CURATION-PIPELINE.md` (if present in this agent)
 

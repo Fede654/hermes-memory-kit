@@ -1,0 +1,119 @@
+{
+  "schema": "memory-ownership/v1",
+  "artifact_classes": [
+    {
+      "id": "wiki-raw-evidence",
+      "selector": {
+        "kind": "filesystem",
+        "path_globs": ["${WIKI_PATH}/**/raw/**"]
+      },
+      "authority": {
+        "store": "llm-wiki",
+        "role": "source"
+      },
+      "replicas": [
+        {
+          "store": "hmk",
+          "role": "retrieval-index",
+          "shelf": "evidence",
+          "rebuildable": true
+        }
+      ]
+    },
+    {
+      "id": "wiki-curated-knowledge",
+      "selector": {
+        "kind": "filesystem",
+        "path_globs": [
+          "${WIKI_PATH}/projects/**/notes/**",
+          "${WIKI_PATH}/concepts/**",
+          "${WIKI_PATH}/entities/**",
+          "${WIKI_PATH}/comparisons/**",
+          "${WIKI_PATH}/queries/**"
+        ]
+      },
+      "authority": {
+        "store": "llm-wiki",
+        "role": "source"
+      },
+      "replicas": [
+        {
+          "store": "hmk",
+          "role": "retrieval-index",
+          "shelf": "library",
+          "rebuildable": true
+        }
+      ]
+    },
+    {
+      "id": "hmk-native-memory",
+      "selector": {
+        "kind": "hmk-record",
+        "origin": "native"
+      },
+      "authority": {
+        "store": "hmk",
+        "role": "source"
+      },
+      "replicas": [
+        {
+          "store": "hmk-projection-vault",
+          "role": "navigation-projection",
+          "rebuildable": true
+        }
+      ]
+    },
+    {
+      "id": "project-operational-state",
+      "selector": {
+        "kind": "filesystem",
+        "path_globs": ["${PROJECT_ROOT}/MEMORY.md"]
+      },
+      "authority": {
+        "store": "project-repository",
+        "role": "source"
+      },
+      "replicas": []
+    },
+    {
+      "id": "dialogue-continuity",
+      "selector": {
+        "kind": "filesystem",
+        "path_globs": [
+          "${AGENT_MEMORY_BASE}/state/DIALOGUE-HANDOFF.md",
+          "${SESSIONS_DIR}/**"
+        ]
+      },
+      "authority": {
+        "store": "session-continuity",
+        "role": "source"
+      },
+      "replicas": []
+    },
+    {
+      "id": "hmk-projection-output",
+      "selector": {
+        "kind": "filesystem",
+        "path_globs": ["${HMK_VAULT_DIR}/live/**"]
+      },
+      "authority": {
+        "store": "hmk",
+        "role": "source"
+      },
+      "replicas": [
+        {
+          "store": "hmk-projection-vault",
+          "role": "navigation-projection",
+          "rebuildable": true
+        }
+      ]
+    }
+  ],
+  "forbidden_overlaps": [
+    {
+      "left": "${HMK_VAULT_DIR}",
+      "right": "${WIKI_PATH}",
+      "reason": "Generated HMK projections must never write into or contain the authoritative LLM Wiki."
+    }
+  ]
+}

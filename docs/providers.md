@@ -23,6 +23,10 @@
 ### Local
 
 - `HERMES_EMBED_LOCAL_MODEL` — default `sentence-transformers/all-MiniLM-L6-v2`
+- `HERMES_EMBED_DEVICE` — device passed to `SentenceTransformer`; defaults to
+  `cuda`. Set `cpu` when several agent processes would otherwise load separate
+  copies of the model into VRAM. Model instances are cached per model and
+  device, so changing this setting in a process selects a distinct encoder.
 
 ### Ollama
 

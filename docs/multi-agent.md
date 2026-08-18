@@ -13,7 +13,7 @@ For each agent, everything it needs lives inside its own workspace:
 ├── hermes-home/         HERMES_HOME — config, SOUL, memories, sessions, plugins
 │   └── .env             ← canonical real file (Hermes upstream writes here with os.replace)
 ├── agent-memory/        durable memory (library.db, state, episodes, plans, index)
-├── wiki/                optional projection
+├── wiki/                optional generated HMK projection (never the LLM Wiki)
 ├── scripts/             tooling (hmk, memoryctl, continuityctl, ...)
 ├── app/                 hermes-agent upstream clone (user installs)
 └── venv/                Python venv for app/ (user creates)

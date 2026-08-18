@@ -6,18 +6,20 @@ This workspace uses Hermes Memory Kit as its durable memory layer.
 
 ## Memory Discipline
 
-- canonical memory lives in `agent-memory/library.db`
+- HMK-native memory lives canonically in `agent-memory/library.db`
 - use `./scripts/hmk memoryctl.py hybrid-pack` for durable retrieval
 - use `./scripts/hmk ingest_any.py` to normalize heterogeneous sources before storage
-- use `wiki/` as projected navigation, not canonical truth
-- canon first, projection after
+- use the workspace `wiki/` only as an HMK-generated projection
+- never point that projection at the authoritative LLM Wiki (`$WIKI_PATH`)
+- LLM Wiki files are authoritative for their raw evidence and curated notes;
+  their HMK chapters are rebuildable retrieval indexes
 - accept `null_retrieval` instead of padding weak context
 
 ## Curation Discipline
 
-- new documentation enters canonical memory first
+- classify new documentation as HMK-native or LLM Wiki-authored first
 - then retrieve related context
-- then inspect wiki maps if conceptual orientation is needed
+- then inspect the appropriate navigation surface if conceptual orientation is needed
 - then decide whether to keep as evidence, link, distill, or project
 
 ## Token Discipline

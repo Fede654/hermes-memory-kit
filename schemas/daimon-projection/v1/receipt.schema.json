@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hermes-memory-kit.local/schemas/daimon-projection/v1/receipt.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "receipt_id", "request_id", "idempotency_key", "request_hash", "operation", "outcome", "target", "namespace", "previous", "current"],
+  "properties": {
+    "schema": {"const": "hmk.daimon-projection.receipt/v1"},
+    "receipt_id": {"$ref": "common.schema.json#/$defs/receipt_id"},
+    "request_id": {"$ref": "common.schema.json#/$defs/uuid"},
+    "idempotency_key": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+    "request_hash": {"$ref": "common.schema.json#/$defs/hash"},
+    "operation": {"enum": ["project", "advance", "retract"]},
+    "outcome": {"const": "applied"},
+    "target": {"$ref": "common.schema.json#/$defs/target"},
+    "namespace": {"type": "object", "additionalProperties": false, "required": ["namespace_id", "generation", "manifest_hash", "source_checkpoint"], "properties": {"namespace_id": {"$ref": "common.schema.json#/$defs/namespace_id"}, "generation": {"type": "integer", "minimum": 1}, "manifest_hash": {"$ref": "common.schema.json#/$defs/hash"}, "source_checkpoint": {"$ref": "common.schema.json#/$defs/checkpoint"}}},
+    "previous": {"oneOf": [{"type": "null"}, {"$ref": "common.schema.json#/$defs/state"}]},
+    "current": {"$ref": "common.schema.json#/$defs/state"}
+  }
+}

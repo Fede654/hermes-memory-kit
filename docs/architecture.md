@@ -2,13 +2,32 @@
 
 Hermes Memory Kit separates:
 
-1. canon (`library.db`)
+1. HMK-native canon (`library.db`)
 2. retrieval (`memoryctl.py`)
 3. ingestion (`ingest_any.py`)
-4. projection (`export_obsidian.py`)
+4. disposable HMK projection (`export_obsidian.py`)
 5. skill (`librarian`)
+6. optional reviewed publication (`publish_collective.py`)
+7. disposable Daimon personal-memory projection (`daimon_projection.py`)
 
-Principle:
+It can also index an independently authored LLM Wiki. In that case the wiki
+file is authoritative and the corresponding HMK chapter is a rebuildable
+retrieval index.
 
-- the wiki helps organize
-- the DB decides factual truth
+Do not use the ambiguous word “wiki” for both surfaces:
+
+- `$WIKI_PATH` / `~/wiki` is the authoritative, human-curated LLM Wiki;
+- `$HMK_VAULT_DIR` is a generated HMK projection vault and must be disjoint.
+
+See [the memory ownership contract](memory-ownership-contract.md).
+
+The Daimon projection is a second, explicitly marked retrieval origin inside
+SQLite. Daimon Matrix owns the source event chain and policy; HMK owns only the
+local index and receipts. Writes cross the closed versioned API, never raw SQL
+or generic librarian mutation. See [the projection contract](daimon-projection.md).
+
+`publish_collective.py` is deliberately outside retrieval and projection. It
+reads HMK in SQLite read-only mode, accepts only dual-opted-in HMK-native
+records, produces an exact review plan, and requires an independent approval
+bound to that plan before writing derived Markdown to a collective-memory
+corpus. See [the publication contract](collective-memory-publication.md).
