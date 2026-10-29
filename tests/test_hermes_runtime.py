@@ -63,6 +63,7 @@ def test_profile_crud_persistence_and_semantic_recall(tmp_path, monkeypatch):
             row = pa._get_memoryctl().search("Valeria")[0]
             a.handle_tool_call("librarian", {"action": "update", "chapter_id": row["id"], "content": "Valeria ahora prefiere viajar en barco."})
             assert "barco" in a.handle_tool_call("recall", {"query": "Valeria"})
+            assert pa._get_memoryctl().semantic_search("transporte marítimo")[0]["raw"].endswith("barco.")
             assert pa.system_prompt_block() == prompt
         with scope(tmp_path / "b"):
             assert "barco" not in b.handle_tool_call("recall", {"query": "Valeria"})

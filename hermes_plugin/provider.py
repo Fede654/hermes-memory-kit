@@ -124,7 +124,14 @@ class HMKMemoryProvider(_legacy.HMKMemoryProvider):
 
     def handle_tool_call(self, tool_name, args, **kwargs):
         try:
-            return super().handle_tool_call(tool_name, args, **kwargs)
+            result = super().handle_tool_call(tool_name, args, **kwargs)
+            if tool_name == "librarian" and args.get("action") in {"add_text", "add_file", "update"}:
+                if json.loads(result).get("success"):
+                    try:
+                        self._memoryctl.backfill_embeddings(only_missing=True)
+                    except self._memoryctl.EmbeddingBackendError as exc:
+                        _LOG.warning("HMK change saved; semantic indexing pending: %s", exc)
+            return result
         except (SystemExit, ValueError, TypeError, sqlite3.Error) as exc:
             # memoryctl's CLI validation raises SystemExit, which must not kill a gateway.
             return json.dumps({"success": False, "error": str(exc)})

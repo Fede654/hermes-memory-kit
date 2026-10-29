@@ -1,5 +1,5 @@
 name: hmk-memory
-kind: memory-provider
+kind: standalone
 version: 1.3.0
 description: Profile-scoped durable SQLite memory with local semantic recall.
 author: hermes-memory-kit
