@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 import shutil
 import sqlite3
+from types import SimpleNamespace
 
 import pytest
 
@@ -105,9 +106,14 @@ def test_session_boundary_import_and_embedding_outage(tmp_path, monkeypatch):
             monkeypatch.setattr(mc, "embed_texts", unavailable)
             assert "Saved" in manager.handle_tool_call("remember", {"title": "Proyecto", "content": "Proyecto Aurora usa SQLite."})
             assert "Aurora" in manager.handle_tool_call("recall", {"query": "Aurora"})
-            monkeypatch.setattr(provider, "_extract_candidates", lambda transcript: [{
-                "shelf": "plans", "title": "Decisión", "content": "Aurora se publica los viernes.", "importance": 0.8, "tags": "",
-            }])
+            def auxiliary_response(**request):
+                assert request["provider"] is None and request["model"] is None
+                assert request["messages"][1]["role"] == "user"
+                payload = [{"shelf": "plans", "title": "Decisión", "content": "Aurora se publica los viernes.",
+                            "importance": 0.8, "tags": ""}]
+                return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))])
+
+            monkeypatch.setattr("agent.auxiliary_client.call_llm", auxiliary_response)
             transcript = [{"role": role, "content": "Conversamos sobre el proyecto Aurora y su publicación. " * 4}
                           for role in ("user", "assistant", "user", "assistant")]
             manager.commit_session_boundary_async(transcript, new_session_id="next", reason="test")
