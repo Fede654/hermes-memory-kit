@@ -34,7 +34,7 @@ def scope(home):
 def install(home):
     home.mkdir()
     plugin = home / "plugins/hmk-memory"
-    shutil.copytree(ROOT, plugin, ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache"))
+    shutil.copytree(ROOT / "hermes_plugin", plugin, ignore=shutil.ignore_patterns(".git", "__pycache__", ".pytest_cache"))
     (home / "config.yaml").write_text("memory:\n  provider: hmk-memory\n  memory_enabled: false\n  user_profile_enabled: false\n  hmk:\n    threshold: 0\n", encoding="utf-8")
     with scope(home):
         provider = load_memory_provider("hmk-memory")

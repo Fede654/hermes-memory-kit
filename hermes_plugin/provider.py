@@ -26,12 +26,12 @@ def _load(name, path):
     return module
 
 
-_legacy = _load(__name__ + "._legacy", _ROOT / "templates/plugins/hmk-memory/__init__.py")
+_legacy = _load(__name__ + "._legacy", _ROOT / "legacy.py")
 
 
 class HMKMemoryProvider(_legacy.HMKMemoryProvider):
     def is_available(self):
-        return (_ROOT / "scripts/memoryctl.py").is_file()
+        return (_ROOT / "memoryctl.py").is_file()
 
     def initialize(self, session_id, **kwargs):
         from hermes_constants import get_hermes_home
@@ -62,8 +62,8 @@ class HMKMemoryProvider(_legacy.HMKMemoryProvider):
         return self._config.get(key, default)
 
     def _make_memoryctl(self):
-        mc = _load(__name__ + ".memoryctl", _ROOT / "scripts/memoryctl.py")
-        policy = _load(__name__ + ".corpus_policy", _ROOT / "scripts/corpus_policy.py")
+        mc = _load(__name__ + ".memoryctl", _ROOT / "memoryctl.py")
+        policy = _load(__name__ + ".corpus_policy", _ROOT / "corpus_policy.py")
         mc.BASE_DIR = self._base
         mc.DB_PATH = Path(self._db_path)
         mc.HERMES_HOME = self._hermes_home

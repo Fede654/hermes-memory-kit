@@ -2,5 +2,5 @@
 
 
 def register(ctx):
-    from .hermes_provider import HMKMemoryProvider
+    from .provider import HMKMemoryProvider
     ctx.register_memory_provider(HMKMemoryProvider())

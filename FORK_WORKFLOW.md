@@ -13,6 +13,6 @@ Mar-IA-no/hermes-memory-kit; fetch it read-only when comparing changes.
   Hermes fork's `fork-memory.json`. Advancing this branch alone never changes
   an installed runtime.
 
-The root plugin is the profile-scoped Hermes provider. The `templates/` tree
+The `hermes_plugin/` package is the profile-scoped Hermes provider. The `templates/` tree
 also supports standalone toolkit workspaces. See
 [installation and validation](docs/hermes-install.md).

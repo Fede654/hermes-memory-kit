@@ -1,7 +1,8 @@
 # Hermes v0.22 integration
 
-The repository root is an installable `memory-provider` plugin. Install an exact
-commit with Hermes' native plugin installer; its PM prepares `model2vec` from
+`hermes_plugin/` is an installable `memory-provider` plugin. Install an exact
+commit with Hermes' native plugin installer using
+`Fede654/hermes-memory-kit#hermes_plugin`; its PM prepares `model2vec` from
 `plugin.yaml`. The older template remains usable by standalone HMK workspaces.
 
 The provider binds its SQLite database to `<HERMES_HOME>/hmk-memory/library.db`.
