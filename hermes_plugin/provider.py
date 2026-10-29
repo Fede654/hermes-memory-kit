@@ -170,7 +170,7 @@ class HMKMemoryProvider(_legacy.HMKMemoryProvider):
             with mc.connect() as con:
                 if con.execute("SELECT 1 FROM hermes_imports WHERE filename=?", (filename,)).fetchone():
                     continue
-            content = path.read_text(encoding="utf-8").strip()
+            content = path.read_text(encoding="utf-8-sig").strip()
             # Deterministic title + replace=True makes retry after interruption idempotent.
             if content:
                 mc.add_text(shelf, "Imported " + filename, content, tags=["native-import"], replace=True)
