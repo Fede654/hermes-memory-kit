@@ -124,6 +124,8 @@ class HMKMemoryProvider(_legacy.HMKMemoryProvider):
 
     def handle_tool_call(self, tool_name, args, **kwargs):
         try:
+            if tool_name == "_hmk_installation_check":
+                return json.dumps({"success": True, **self.verify()})
             result = super().handle_tool_call(tool_name, args, **kwargs)
             if tool_name == "librarian" and args.get("action") in {"add_text", "add_file", "update"}:
                 if json.loads(result).get("success"):
