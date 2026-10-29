@@ -34,6 +34,9 @@ It is a practical memory layer for agents that actually live on a machine and ne
 
 ---
 
+For the profile-scoped Hermes v0.22 provider and automatic-install contract, see
+[Hermes integration](docs/hermes-install.md).
+
 ## Table of Contents
 
 - [What This Repo Is](#what-this-repo-is)

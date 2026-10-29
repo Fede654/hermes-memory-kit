@@ -1,0 +1,7 @@
+name: hmk-memory
+kind: memory-provider
+version: 1.3.0
+description: Profile-scoped durable SQLite memory with local semantic recall.
+author: hermes-memory-kit
+python_dependencies:
+  - "model2vec>=0.7,<0.12"

@@ -176,6 +176,8 @@ LIBRARIAN_SCHEMA = {
 class HMKMemoryProvider(MemoryProvider):
     """Long-term memory provider for Hermes Agent backed by library.db."""
 
+    _setting = staticmethod(os.environ.get)
+
     DEFAULT_QUOTAS = {"episodic": 2, "semantic": 4, "procedural": 2}
     DEFAULT_LIMIT = 8
     DEFAULT_THRESHOLD = 0.30
@@ -232,13 +234,13 @@ class HMKMemoryProvider(MemoryProvider):
         )
         self._hermes_home = (
             kwargs.get("hermes_home")
-            or os.environ.get("HERMES_HOME")
-            or os.environ.get("HMK_HERMES_HOME")
+            or self._setting("HERMES_HOME")
+            or self._setting("HMK_HERMES_HOME")
         )
         self._memoryctl = None  # lazy; first prefetch loads it
 
         self._engram_available = self._check_engram_columns()
-        self._retriever = os.environ.get("HMK_PROVIDER_RETRIEVER", self.DEFAULT_RETRIEVER)
+        self._retriever = self._setting("HMK_PROVIDER_RETRIEVER", self.DEFAULT_RETRIEVER)
         if self._retriever == "engram_pack" and not self._engram_available:
             logger.info(
                 "hmk-memory: ENGRAM columns not present, falling back to hybrid_pack"
@@ -246,21 +248,21 @@ class HMKMemoryProvider(MemoryProvider):
             self._retriever = "hybrid_pack"
 
         self._quotas = {
-            "episodic": int(os.environ.get(
+            "episodic": int(self._setting(
                 "HMK_PROVIDER_QUOTA_EPISODIC", self.DEFAULT_QUOTAS["episodic"])),
-            "semantic": int(os.environ.get(
+            "semantic": int(self._setting(
                 "HMK_PROVIDER_QUOTA_SEMANTIC", self.DEFAULT_QUOTAS["semantic"])),
-            "procedural": int(os.environ.get(
+            "procedural": int(self._setting(
                 "HMK_PROVIDER_QUOTA_PROCEDURAL", self.DEFAULT_QUOTAS["procedural"])),
         }
-        self._limit = int(os.environ.get("HMK_PROVIDER_LIMIT", self.DEFAULT_LIMIT))
+        self._limit = int(self._setting("HMK_PROVIDER_LIMIT", self.DEFAULT_LIMIT))
         self._threshold = float(
-            os.environ.get("HMK_PROVIDER_THRESHOLD", self.DEFAULT_THRESHOLD)
+            self._setting("HMK_PROVIDER_THRESHOLD", self.DEFAULT_THRESHOLD)
         )
         self._budget = int(
-            os.environ.get("HMK_PROVIDER_BUDGET_TOKENS", self.DEFAULT_BUDGET_TOKENS)
+            self._setting("HMK_PROVIDER_BUDGET_TOKENS", self.DEFAULT_BUDGET_TOKENS)
         )
-        shelves = os.environ.get("HMK_PROVIDER_SHELVES", "").strip()
+        shelves = self._setting("HMK_PROVIDER_SHELVES", "").strip()
         self._shelves = (
             [s.strip() for s in shelves.split(",") if s.strip()] or None
         )
@@ -330,6 +332,7 @@ class HMKMemoryProvider(MemoryProvider):
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:
         if tool_name == "remember":
+            mc = self._get_memoryctl()
             content = (args.get("content") or "").strip()
             if not content:
                 return "ERROR: 'content' is required."
@@ -359,6 +362,7 @@ class HMKMemoryProvider(MemoryProvider):
                 shelf, cid, title, embed_note)
 
         if tool_name == "recall":
+            mc = self._get_memoryctl()
             query = (args.get("query") or "").strip()
             if not query:
                 return "ERROR: 'query' is required."
@@ -665,7 +669,7 @@ class HMKMemoryProvider(MemoryProvider):
 
     def on_session_end(self, messages):
         try:
-            if (os.environ.get("HMK_DISTILL_ENABLED", "1").strip().lower()
+            if (self._setting("HMK_DISTILL_ENABLED", "1").strip().lower()
                     in ("0", "false", "no", "off")):
                 return
             if not messages or not isinstance(messages, list):
@@ -707,7 +711,7 @@ class HMKMemoryProvider(MemoryProvider):
 
     def _run_distill(self, messages):
         try:
-            min_turns = int(os.environ.get("HMK_DISTILL_MIN_TURNS", "2"))
+            min_turns = int(self._setting("HMK_DISTILL_MIN_TURNS", "2"))
             user_turns = sum(1 for m in messages if isinstance(m, dict) and m.get("role") == "user")
             if user_turns < min_turns:
                 return
@@ -724,10 +728,10 @@ class HMKMemoryProvider(MemoryProvider):
             logger.warning("hmk-distill failed: %s", e)
 
     def _extract_candidates(self, transcript):
-        provider = os.environ.get("HMK_DISTILL_PROVIDER", "kimi-coding")
-        model = os.environ.get("HMK_DISTILL_MODEL", "kimi-k2.7")
-        timeout = float(os.environ.get("HMK_DISTILL_TIMEOUT", "120"))
-        max_facts = int(os.environ.get("HMK_DISTILL_MAX_FACTS", "5"))
+        provider = self._setting("HMK_DISTILL_PROVIDER", None)
+        model = self._setting("HMK_DISTILL_MODEL", None)
+        timeout = float(self._setting("HMK_DISTILL_TIMEOUT", "120"))
+        max_facts = int(self._setting("HMK_DISTILL_MAX_FACTS", "5"))
         from agent.auxiliary_client import call_llm
         resp = call_llm(
             provider=provider, model=model,
@@ -780,7 +784,7 @@ class HMKMemoryProvider(MemoryProvider):
 
     def _persist_candidates(self, cands):
         mc = self._get_memoryctl()
-        dedup_thr = float(os.environ.get("HMK_DISTILL_DEDUP_THRESHOLD", "0.82"))
+        dedup_thr = float(self._setting("HMK_DISTILL_DEDUP_THRESHOLD", "0.82"))
         added = 0
         for c in cands:
             try:
